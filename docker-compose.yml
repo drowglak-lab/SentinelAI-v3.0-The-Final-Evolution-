@@ -1,0 +1,24 @@
+services:
+  sentinel-gateway:
+    build: 
+      context: .
+      dockerfile: Dockerfile
+    image: sentinel-ai-gateway:v3.0
+    container_name: sentinel_control_plane
+    ports:
+      - "8000:8000"
+    environment:
+      - ENVIRONMENT=production
+      - LOG_LEVEL=info
+    # Restrict resources to prevent a single compromised container from crashing the host node
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 1G
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/docs"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
