@@ -9,8 +9,12 @@ name = "sentinel_core"
 crate-type = ["cdylib"]
 
 [dependencies]
-# The bridge between Rust and Python
-pyo3 = { version = "0.20", features = ["extension-module"] }
+# We update the version and add support for stable ABI
+pyo3 = { version = "0.21", features = ["extension-module", "abi3-py312"] }
+dashmap = "5.5"
+arc-swap = "1.6"
+lazy_static = "1.4"
+serde = { version = "1.0", features = ["derive"] }
 
 # Ultra-fast parallel hash tables (our Store)
 dashmap = "5.5"
