@@ -1,0 +1,18 @@
+[package]
+name = "sentinel_core"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+# This is crucial: we specify that this is a dynamic library for Python
+name = "sentinel_core"
+crate-type = ["cdylib"]
+
+[dependencies]
+# The bridge between Rust and Python
+pyo3 = { version = "0.20", features = ["extension-module"] }
+# Ultra-fast parallel hash tables (our Store)
+dashmap = "5.5"
+# Lock-free memory snapshots
+arc-swap = "1.6"
+serde = { version = "1.0", features = ["derive"] }
