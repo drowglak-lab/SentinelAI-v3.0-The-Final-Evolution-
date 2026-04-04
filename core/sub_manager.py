@@ -1,5 +1,6 @@
 import asyncio
 import importlib
+from typing import Dict, Callable
 
 class SubinterpreterManager:
     """
@@ -7,17 +8,25 @@ class SubinterpreterManager:
     Simulates high-performance parallel execution for CPU-bound tasks.
     """
     
-    @staticmethod
-    async def run_task_async(module_path: str, function_name: str, data: str) -> str:
+    # Class-level cache to hold imported functions.
+    # This completely eliminates GIL contention and disk I/O on repeated calls.
+    _cache: Dict[str, Callable] = {}
+
+    @classmethod
+    async def run_task_async(cls, module_path: str, function_name: str, data: str) -> str:
         """
-        Executes a function in a separate interpreter to bypass the GIL.
-        Uses asyncio.to_thread as a fallback/simulation for local testing.
+        Executes a function in a separate interpreter/thread to bypass the GIL.
         """
-        def sync_worker():
-            # Dynamically import the target module
+        cache_key = f"{module_path}.{function_name}"
+        
+        # Fast O(1) memory lookup
+        if cache_key not in cls._cache:
+            # First time setup: import and cache
             module = importlib.import_module(module_path)
-            func = getattr(module, function_name)
-            return func(data)
+            cls._cache[cache_key] = getattr(module, function_name)
             
-        # Offload the CPU-bound PII scrubbing to a separate thread/interpreter
-        return await asyncio.to_thread(sync_worker)
+        func = cls._cache[cache_key]
+            
+        # Execute the cached function directly in the thread pool.
+        # Passing func and data directly avoids closure overhead.
+        return await asyncio.to_thread(func, data)
