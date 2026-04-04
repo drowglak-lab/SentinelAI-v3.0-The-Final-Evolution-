@@ -26,7 +26,8 @@ async def get_current_agent(x_agent_token: str = Header(...)) -> AgentIdentity:
         raise HTTPException(status_code=401, detail="Invalid token.")
     return AgentIdentity(
         id="bot_01", 
-        permissions=["account:read_balance", "payment:transfer_funds"] # Used scopes from identity layer
+        # Fixed: now the permissions exactly match the tool names from JSON
+        permissions=["read_balance", "transfer_funds"] 
     )
 
 @app.post("/v1/agent/execute", response_model=dict)
