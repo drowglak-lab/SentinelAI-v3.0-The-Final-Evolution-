@@ -47,7 +47,7 @@ async def ingest_root(data: RootHashPayload):
     if CHAIN_STORAGE and data.prev_hash != CHAIN_STORAGE[-1]['root_hash']:
         raise HTTPException(status_code=409, detail="Hash chain broken")
 
-    CHAIN_STORAGE.append(data.dict())
+    CHAIN_STORAGE.append(data.model_dump())
     PROCESSED_BATCHES.add(data.root_hash)
     print(f"✅ SIEM принял Merkle Root: {data.root_hash[:12]} | Индекс: {len(CHAIN_STORAGE)}")
     return {"status": "accepted"}
