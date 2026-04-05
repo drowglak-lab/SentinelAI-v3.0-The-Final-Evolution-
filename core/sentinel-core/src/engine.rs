@@ -8,7 +8,7 @@ pub struct EvaluationEngine {
 }
 
 impl EvaluationEngine {
-    // РЕКУРСИВНЫЙ МАТЧЕР
+    // РЕКУРСИВНАЯ ФУНКЦИЯ ПРОВЕРКИ
     fn check_condition(&self, cond: &Condition, context: &HashMap<String, PolicyValue>) -> bool {
         match cond {
             Condition::Atom { attr_key, operator, value } => {
@@ -23,9 +23,9 @@ impl EvaluationEngine {
                     _ => false,
                 }
             },
-            Condition::And(sub_conds) => sub_conds.iter().all(|c| self.check_condition(c, context)),
-            Condition::Or(sub_conds) => sub_conds.iter().any(|c| self.check_condition(c, context)),
-            Condition::Not(sub_cond) => !self.check_condition(sub_cond, context),
+            Condition::And(conds) => conds.iter().all(|c| self.check_condition(c, context)),
+            Condition::Or(conds) => conds.iter().any(|c| self.check_condition(c, context)),
+            Condition::Not(cond) => !self.check_condition(cond, context),
         }
     }
 
@@ -69,7 +69,7 @@ impl EvaluationEngine {
             policy_id: enforce_state.1,
             shadow_decision: shadow_state.0,
             shadow_policy_id: shadow_state.1,
-            reason: "Logic tree evaluation complete".to_string(),
+            reason: "Tree evaluation complete".to_string(),
             version: self.version.clone(),
             traces,
         }
