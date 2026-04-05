@@ -5,65 +5,48 @@ from contextlib import asynccontextmanager
 
 def build_financial_risk(amount: float, user_tier: str) -> float:
     base_risk = 0.2
-    if amount > 1000:
-        base_risk += 0.4
-    if amount > 5000:
-        base_risk += 0.3
-    if user_tier == "new":
-        base_risk += 0.2
+    if amount > 1000: base_risk += 0.4
+    if amount > 5000: base_risk += 0.3
+    if user_tier == "new": base_risk += 0.2
     return min(base_risk, 1.0)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    try:
-        sentinel_core.add_policy("fin_limit_standard", "transfer_funds", 100)
-        sentinel_core.add_policy("fin_limit_high", "transfer_funds", 500)
-        print("🛡️ [Sentinel] Financial Shield active. Policies synchronized.")
-    except Exception as e:
-        print(f"❌ [Sentinel] Failed to initialize Rust Core: {e}")
+    # Основная политика (Enforce)
+    sentinel_core.add_policy("fin_limit_high", "transfer_funds", 500, sentinel_core.ExecutionMode.Enforce)
+    
+    # Теневая экспериментальная политика 🚩
+    # Мы тестируем ее в Shadow Mode, чтобы не мешать бизнесу
+    sentinel_core.add_policy("exp_v2_rules", "transfer_funds", 999, sentinel_core.ExecutionMode.Shadow)
+    
+    print("🛡️ [Sentinel] Hybrid Mode active: Enforce + Shadow.")
     yield
 
 app = FastAPI(title="SentinelAI v3.0: Financial Guard", lifespan=lifespan)
 
 @app.post("/v1/banking/transfer")
-async def handle_transfer(
-    payload: dict = Body(...), 
-    x_agent_token: str = Header(None)
-):
+async def handle_transfer(payload: dict = Body(...), x_agent_token: str = Header(None)):
     if x_agent_token != "bank_secret_token":
         raise HTTPException(status_code=401, detail="Invalid Security Token")
 
     amount = payload.get("amount", 0.0)
-    recipient = payload.get("recipient", "unknown")
     user_tier = payload.get("user_tier", "standard")
-    prompt = payload.get("prompt", "")
-
-    # Очистка PII
-    clean_prompt = scrub_pii(prompt)
-
-    # Вычисление риска
+    
+    clean_prompt = scrub_pii(payload.get("prompt", ""))
     current_risk = build_financial_risk(amount, user_tier)
 
-    # Вызов Rust-ядра
-    result = sentinel_core.fast_evaluate(
-        tool_name="transfer_funds",
-        risk=current_risk
-    )
+    # Вызов Rust-ядра (двойной проход внутри)
+    result = sentinel_core.fast_evaluate(tool_name="transfer_funds", risk=current_risk)
+
+    # Детектор Policy Drift (Дрейфа политик)
+    if result.decision != result.shadow_decision:
+        print(f"⚠️ [DRIFT] Shadow logic disagreed! Policy: {result.shadow_policy_id}")
 
     if result.decision == sentinel_core.Decision.Deny:
-        return {
-            "status": "DENIED",
-            "security_event": {
-                "policy_id": result.policy_id,
-                "calculated_risk": current_risk,
-                "reason": result.reason,
-                "action": "BLOCKED"
-            },
-            "scrubbed_prompt": clean_prompt
-        }
+        return {"status": "DENIED", "policy_id": result.policy_id}
 
     return {
         "status": "SUCCESS",
-        "transaction": {"id": "tx_2026_0504", "amount": amount, "recipient": recipient},
-        "metrics": {"risk_score": current_risk, "engine": "rust-core-v1"}
+        "metrics": {"risk": current_risk},
+        "shadow_report": {"verdict": str(result.shadow_decision)}
     }
