@@ -8,12 +8,12 @@ pub struct EvaluationEngine {
 }
 
 impl EvaluationEngine {
-    // РЕКУРСИВНАЯ ФУНКЦИЯ ПРОВЕРКИ
     fn check_condition(&self, cond: &Condition, context: &HashMap<String, PolicyValue>) -> bool {
         match cond {
-            Condition::Atom { attr_key, operator, value } => {
-                let actual = context.get(attr_key);
-                match (actual, value, operator.as_str()) {
+            // ⚡ ИСПРАВЛЕНИЕ: Обращаемся к полям через atom.
+            Condition::Atom(atom) => {
+                let actual = context.get(&atom.attr_key);
+                match (actual, &atom.value, atom.operator.as_str()) {
                     (Some(PolicyValue::Float(a)), PolicyValue::Float(b), "gt") => a > b,
                     (Some(PolicyValue::Float(a)), PolicyValue::Float(b), "lt") => a < b,
                     (Some(PolicyValue::Str(a)), PolicyValue::Str(b), "eq") => a == b,
