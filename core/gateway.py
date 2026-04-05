@@ -2,15 +2,16 @@ import sentinel_core
 import logging
 import sys
 import json
+import asyncio  # ⚡ НОВОЕ: Нужно для фоновых задач
 from fastapi import FastAPI, Header, HTTPException, Body
 from contextlib import asynccontextmanager
 
 # Импортируем нашу новую архитектуру
 from core.app.context import ContextFactory
-from core.app.stages import EnrichmentStage, RustEvaluationStage, ExplainStage, ForensicAuditStage
+from core.app.stages import EnrichmentStage, RustEvaluationStage, ExplainStage, ForensicAuditStage, periodic_flush # ⚡ НОВОЕ: Импортировали таймер
 from core.app.pipeline import SentinelPipeline
 
-# ⚡ НОВОЕ: Импортируем наш модуль доверия
+# Импортируем наш модуль доверия
 from core.trust import verify_policy_integrity, SecurityTamperingException
 
 # Настройка логирования
@@ -30,7 +31,7 @@ pipeline = SentinelPipeline([
     ForensicAuditStage()    # 4. Логируем
 ])
 
-# ⚡ НОВОЕ: Жесткая проверка безопасности при старте
+# Жесткая проверка безопасности при старте
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     try:
@@ -41,7 +42,15 @@ async def lifespan(app: FastAPI):
         # 2. Только если проверка пройдена, грузим их в ядро
         sentinel_core.load_policies("core/policies.yaml")
         logger.info(json.dumps({"event": "startup", "status": "ready"}))
+        
+        # ⚡ НОВОЕ: Запускаем фоновый таймер отправки логов
+        flush_task = asyncio.create_task(periodic_flush())
+        
         yield
+        
+        # ⚡ НОВОЕ: Останавливаем таймер при выключении шлюза
+        flush_task.cancel()
+        
     except SecurityTamperingException as e:
         # HARD FAIL: убиваем процесс, если конфигурация скомпрометирована
         logger.error(json.dumps({"event": "FATAL_ERROR", "reason": str(e)}))
