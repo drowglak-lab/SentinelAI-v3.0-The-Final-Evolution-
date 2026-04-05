@@ -19,21 +19,41 @@ impl EvaluationEngine {
         let mut traces = Vec::new();
 
         for policy in policies {
-            let actual_val = if let Some(AttrValue::Float(v)) = context.get(&policy.attr_key) { *v } else { 0.0 };
-            
-            let is_match = match policy.operator.as_str() {
-                "gt" => actual_val > policy.threshold,
-                "lt" => actual_val < policy.threshold,
-                _ => false,
-            };
+            let mut is_match = false;
+            let mut current_actual_str: Option<String> = None;
 
-            // Сохраняем след
+            // Логика сравнения
+            if let Some(val) = context.get(&policy.attr_key) {
+                match (val, policy.operator.as_str()) {
+                    // Числовые операторы
+                    (AttrValue::Float(v), "gt") => is_match = *v > policy.threshold,
+                    (AttrValue::Float(v), "lt") => is_match = *v < policy.threshold,
+                    
+                    // СТРОКОВЫЕ операторы (⚡ НОВОЕ)
+                    (AttrValue::Str(v), "eq") => {
+                        current_actual_str = Some(v.clone());
+                        if let Some(target) = &policy.target_val {
+                            is_match = v == target;
+                        }
+                    },
+                    (AttrValue::Str(v), "contains") => {
+                        current_actual_str = Some(v.clone());
+                        if let Some(target) = &policy.target_val {
+                            is_match = v.contains(target);
+                        }
+                    },
+                    _ => {}
+                }
+            }
+
             traces.push(EvaluationTrace {
                 policy_id: policy.id.clone(),
                 matched: is_match,
                 attr_key: policy.attr_key.clone(),
                 threshold: policy.threshold,
-                actual_value: actual_val,
+                actual_value: if let Some(AttrValue::Float(v)) = context.get(&policy.attr_key) { *v } else { 0.0 },
+                actual_str: current_actual_str,
+                expected_str: policy.target_val.clone(),
                 mode: policy.mode,
             });
 
