@@ -1,7 +1,15 @@
 use pyo3::prelude::*;
+use serde::Serialize;
 
 #[pyclass]
-#[derive(Clone, Debug, PartialEq, Eq)] // PartialEq обязателен для сравнения в engine.rs
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Copy)]
+pub enum ExecutionMode {
+    Enforce,
+    Shadow,
+}
+
+#[pyclass]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Copy)]
 pub enum Decision {
     Allow,
     Deny,
@@ -15,21 +23,18 @@ pub struct EvaluationResult {
     pub decision: Decision,
     #[pyo3(get)]
     pub policy_id: String,
+    // Поля для Shadow Mode
+    #[pyo3(get)]
+    pub shadow_decision: Decision,
+    #[pyo3(get)]
+    pub shadow_policy_id: String,
     #[pyo3(get)]
     pub reason: String,
 }
 
-#[pymethods]
-impl EvaluationResult {
-    #[new]
-    pub fn new(decision: Decision, policy_id: String, reason: String) -> Self {
-        EvaluationResult { decision, policy_id, reason }
-    }
-}
-
-// Общая структура политики, которую будут использовать все модули
 pub struct Policy {
     pub id: String,
     pub tool_name: String,
     pub priority: u32,
+    pub mode: ExecutionMode, // Новое поле
 }
