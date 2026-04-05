@@ -1,4 +1,5 @@
-use crate::models::{Decision, EvaluationResult, Policy, ExecutionMode};
+use crate::models::{Decision, EvaluationResult, Policy, ExecutionMode, AttrValue};
+use std::collections::HashMap;
 use std::sync::Arc;
 
 pub struct EvaluationEngine {
@@ -6,7 +7,7 @@ pub struct EvaluationEngine {
 }
 
 impl EvaluationEngine {
-    pub fn evaluate(&self, tool_name: &str, context_risk: f32) -> EvaluationResult {
+    pub fn evaluate(&self, tool_name: &str, context: &HashMap<String, AttrValue>) -> EvaluationResult {
         let policies = match self.snapshot.by_tool.get(tool_name) {
             Some(p) => p,
             None => return EvaluationResult {
@@ -22,8 +23,14 @@ impl EvaluationEngine {
         let mut shadow_state = (Decision::Abstain, "default".to_string());
 
         for policy in policies {
-            // Имитация логики DSL (риск > 0.8 => Deny)
-            let current_decision = if context_risk > 0.8 { Decision::Deny } else { Decision::Allow };
+            // Ищем значение в контексте. Если нашли Float — сравниваем.
+            let is_match = if let Some(AttrValue::Float(val)) = context.get(&policy.attr_key) {
+                *val > policy.threshold
+            } else {
+                false
+            };
+
+            let current_decision = if is_match { Decision::Deny } else { Decision::Allow };
 
             match policy.mode {
                 ExecutionMode::Enforce => {
@@ -44,7 +51,7 @@ impl EvaluationEngine {
             policy_id: enforce_state.1,
             shadow_decision: shadow_state.0,
             shadow_policy_id: shadow_state.1,
-            reason: "Dual-mode evaluation complete".to_string(),
+            reason: "Context-aware evaluation complete".to_string(),
         }
     }
 }
