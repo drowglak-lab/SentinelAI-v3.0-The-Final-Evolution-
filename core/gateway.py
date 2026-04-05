@@ -16,7 +16,7 @@ logger.setLevel(logging.INFO)
 if not logger.handlers:
     handlers = [logging.StreamHandler(sys.stdout), logging.FileHandler("audit.log")]
     for h in handlers:
-        h.set_Formatter(logging.Formatter('%(message)s'))
+        h.setFormatter(logging.Formatter('%(message)s'))
         logger.addHandler(h)
 
 # Инициализируем конвейер
