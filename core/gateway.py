@@ -7,8 +7,11 @@ from contextlib import asynccontextmanager
 
 # Импортируем нашу новую архитектуру
 from core.app.context import ContextFactory
-from core.app.stages import EnrichmentStage, RustEvaluationStage, ExplainStage, ForensicAuditStage # ⚡ ДОБАВИЛИ EnrichmentStage
+from core.app.stages import EnrichmentStage, RustEvaluationStage, ExplainStage, ForensicAuditStage
 from core.app.pipeline import SentinelPipeline
+
+# ⚡ НОВОЕ: Импортируем наш модуль доверия
+from core.trust import verify_policy_integrity, SecurityTamperingException
 
 # Настройка логирования
 logger = logging.getLogger("sentinel-ai")
@@ -19,7 +22,7 @@ if not logger.handlers:
         h.setFormatter(logging.Formatter('%(message)s'))
         logger.addHandler(h)
 
-# ⚡ НОВОЕ: Встраиваем EnrichmentStage ПЕРЕД Rust-ядром
+# Встраиваем EnrichmentStage ПЕРЕД Rust-ядром
 pipeline = SentinelPipeline([
     EnrichmentStage(),      # 1. Обогащаем скрытыми данными
     RustEvaluationStage(),  # 2. Вычисляем
@@ -27,11 +30,22 @@ pipeline = SentinelPipeline([
     ForensicAuditStage()    # 4. Логируем
 ])
 
+# ⚡ НОВОЕ: Жесткая проверка безопасности при старте
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    sentinel_core.load_policies("core/policies.yaml")
-    logger.info(json.dumps({"event": "startup", "status": "ready"}))
-    yield
+    try:
+        # 1. Проверяем криптографическую подпись политик
+        policy_hash = verify_policy_integrity()
+        logger.info(json.dumps({"event": "security_check", "status": "passed", "policy_hash": policy_hash[:12]}))
+        
+        # 2. Только если проверка пройдена, грузим их в ядро
+        sentinel_core.load_policies("core/policies.yaml")
+        logger.info(json.dumps({"event": "startup", "status": "ready"}))
+        yield
+    except SecurityTamperingException as e:
+        # HARD FAIL: убиваем процесс, если конфигурация скомпрометирована
+        logger.error(json.dumps({"event": "FATAL_ERROR", "reason": str(e)}))
+        raise RuntimeError("System halted due to security violation.")
 
 app = FastAPI(title="SentinelAI v3.0: Enterprise Pipeline", lifespan=lifespan)
 
