@@ -29,7 +29,6 @@ pub enum ExecutionMode { Enforce, Shadow }
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
 pub enum Decision { Allow, Deny, Abstain }
 
-// ⚡ ИСПРАВЛЕНИЕ: Выносим Атом в отдельную структуру
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct AtomCondition {
     pub attr_key: String,
@@ -37,13 +36,14 @@ pub struct AtomCondition {
     pub value: PolicyValue,
 }
 
+// ⚡ ИСПРАВЛЕНИЕ: Untagged enum, который ищет ключи "and", "or", "atom"
 #[derive(Debug, Serialize, Deserialize, Clone)]
-#[serde(rename_all = "lowercase")]
+#[serde(untagged)]
 pub enum Condition {
-    And(Vec<Condition>),
-    Or(Vec<Condition>),
-    Not(Box<Condition>),
-    Atom(AtomCondition), // ⚡ Теперь парсер YAML не будет путаться
+    AndMap { and: Vec<Condition> },
+    OrMap { or: Vec<Condition> },
+    NotMap { not: Box<Condition> },
+    AtomMap { atom: AtomCondition },
 }
 
 #[pyclass]
