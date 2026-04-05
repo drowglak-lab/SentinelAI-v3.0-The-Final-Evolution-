@@ -1,18 +1,18 @@
-version: "1.5"
+version: "1.6"
 policies:
+  - id: "eu_whitelist"
+    tool: "transfer_funds"
+    mode: "shadow"
+    attr_key: "country"
+    operator: "in"
+    value: ["ES", "IT", "FR", "DE"]
+
   - id: "large_transfer_block"
     tool: "transfer_funds"
     mode: "enforce"
     attr_key: "risk_score"
     operator: "gt"
     value: 0.8
-
-  - id: "spain_geo_check"
-    tool: "transfer_funds"
-    mode: "shadow"
-    attr_key: "country"
-    operator: "eq"
-    value: "ES"
 
   - id: "vip_limit_check"
     tool: "transfer_funds"
