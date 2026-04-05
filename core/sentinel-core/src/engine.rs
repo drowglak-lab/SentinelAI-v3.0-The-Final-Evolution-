@@ -21,17 +21,13 @@ impl EvaluationEngine {
         for policy in policies {
             let actual_val = context.get(&policy.attr_key);
             
-            // Прямое и безопасное сравнение типов
             let is_match = match (actual_val, &policy.value, policy.operator.as_str()) {
-                // Числа
                 (Some(PolicyValue::Float(a)), PolicyValue::Float(b), "gt") => a > b,
                 (Some(PolicyValue::Float(a)), PolicyValue::Float(b), "lt") => a < b,
-                
-                // Строки
                 (Some(PolicyValue::Str(a)), PolicyValue::Str(b), "eq") => a == b,
                 (Some(PolicyValue::Str(a)), PolicyValue::Str(b), "contains") => a.contains(b),
-                
-                // Ошибка типов или отсутствие поля
+                (Some(val), PolicyValue::List(list), "in") => list.contains(val),
+                (Some(val), PolicyValue::List(list), "not_in") => !list.contains(val),
                 _ => false, 
             };
 
@@ -65,7 +61,7 @@ impl EvaluationEngine {
             policy_id: enforce_state.1,
             shadow_decision: shadow_state.0,
             shadow_policy_id: shadow_state.1,
-            reason: "Unified type evaluation complete".to_string(),
+            reason: "Multi-type evaluation complete".to_string(),
             version: self.version.clone(),
             traces,
         }
