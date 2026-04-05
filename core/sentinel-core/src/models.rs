@@ -1,8 +1,6 @@
 use pyo3::prelude::*;
 use serde::{Serialize, Deserialize};
 
-// Убрали #[pyclass], так как для внутренних нужд он не требуется, 
-// а PyO3 не поддерживает сложные Enum с данными в вариантах.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum AttrValue {
     Float(f32),
@@ -10,7 +8,6 @@ pub enum AttrValue {
     Bool(bool),
 }
 
-// Ручная реализация конвертации из Python объектов в наш Enum
 impl<'source> FromPyObject<'source> for AttrValue {
     fn extract_bound(ob: &Bound<'source, PyAny>) -> PyResult<Self> {
         if let Ok(val) = ob.extract::<f32>() {
@@ -20,7 +17,7 @@ impl<'source> FromPyObject<'source> for AttrValue {
         } else if let Ok(val) = ob.extract::<bool>() {
             Ok(AttrValue::Bool(val))
         } else {
-            Err(PyErr::new::<pyo3::exceptions::PyTypeError, _>("Unsupported type in context"))
+            Err(PyErr::new::<pyo3::exceptions::PyTypeError, _>("Unsupported context type"))
         }
     }
 }
@@ -56,5 +53,6 @@ pub struct Policy {
 
 #[derive(Debug, Deserialize)]
 pub struct PolicyConfig {
+    pub version: String, // <--- ТЕПЕРЬ ПОЛЕ ЕСТЬ
     pub policies: Vec<Policy>,
 }
