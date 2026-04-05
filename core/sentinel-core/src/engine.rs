@@ -1,4 +1,4 @@
-use crate::models::{Decision, EvaluationResult, ExecutionMode, AttrValue, EvaluationTrace};
+use crate::models::{Decision, EvaluationResult, ExecutionMode, PolicyValue, EvaluationTrace};
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -8,7 +8,7 @@ pub struct EvaluationEngine {
 }
 
 impl EvaluationEngine {
-    pub fn evaluate(&self, tool_name: &str, context: &HashMap<String, AttrValue>) -> EvaluationResult {
+    pub fn evaluate(&self, tool_name: &str, context: &HashMap<String, PolicyValue>) -> EvaluationResult {
         let policies = match self.snapshot.by_tool.get(tool_name) {
             Some(p) => p,
             None => return self.default_deny("No policies found"),
@@ -19,41 +19,28 @@ impl EvaluationEngine {
         let mut traces = Vec::new();
 
         for policy in policies {
-            let mut is_match = false;
-            let mut current_actual_str: Option<String> = None;
-
-            // Логика сравнения
-            if let Some(val) = context.get(&policy.attr_key) {
-                match (val, policy.operator.as_str()) {
-                    // Числовые операторы
-                    (AttrValue::Float(v), "gt") => is_match = *v > policy.threshold,
-                    (AttrValue::Float(v), "lt") => is_match = *v < policy.threshold,
-                    
-                    // СТРОКОВЫЕ операторы (⚡ НОВОЕ)
-                    (AttrValue::Str(v), "eq") => {
-                        current_actual_str = Some(v.clone());
-                        if let Some(target) = &policy.target_val {
-                            is_match = v == target;
-                        }
-                    },
-                    (AttrValue::Str(v), "contains") => {
-                        current_actual_str = Some(v.clone());
-                        if let Some(target) = &policy.target_val {
-                            is_match = v.contains(target);
-                        }
-                    },
-                    _ => {}
-                }
-            }
+            let actual_val = context.get(&policy.attr_key);
+            
+            // Прямое и безопасное сравнение типов
+            let is_match = match (actual_val, &policy.value, policy.operator.as_str()) {
+                // Числа
+                (Some(PolicyValue::Float(a)), PolicyValue::Float(b), "gt") => a > b,
+                (Some(PolicyValue::Float(a)), PolicyValue::Float(b), "lt") => a < b,
+                
+                // Строки
+                (Some(PolicyValue::Str(a)), PolicyValue::Str(b), "eq") => a == b,
+                (Some(PolicyValue::Str(a)), PolicyValue::Str(b), "contains") => a.contains(b),
+                
+                // Ошибка типов или отсутствие поля
+                _ => false, 
+            };
 
             traces.push(EvaluationTrace {
                 policy_id: policy.id.clone(),
                 matched: is_match,
                 attr_key: policy.attr_key.clone(),
-                threshold: policy.threshold,
-                actual_value: if let Some(AttrValue::Float(v)) = context.get(&policy.attr_key) { *v } else { 0.0 },
-                actual_str: current_actual_str,
-                expected_str: policy.target_val.clone(),
+                expected: policy.value.clone(),
+                actual: actual_val.cloned(),
                 mode: policy.mode,
             });
 
@@ -78,7 +65,7 @@ impl EvaluationEngine {
             policy_id: enforce_state.1,
             shadow_decision: shadow_state.0,
             shadow_policy_id: shadow_state.1,
-            reason: "Explainable evaluation complete".to_string(),
+            reason: "Unified type evaluation complete".to_string(),
             version: self.version.clone(),
             traces,
         }
