@@ -1,46 +1,58 @@
+use crate::models::{Policy, PolicyConfig};
+use lazy_static::lazy_static;
 use std::collections::HashMap;
-use std::sync::Arc;
-use arc_swap::ArcSwap;
-use dashmap::DashMap;
-use crate::models::Policy; // Importing from a neighboring module
+use std::fs;
+use std::sync::{Arc, RwLock};
 
+// Снапшот для безопасного многопоточного чтения без блокировок
 pub struct PolicySnapshot {
-    pub by_tool: HashMap<String, Vec<Arc<Policy>>>,
-    pub version: u64,
+    pub by_tool: HashMap<String, Vec<Policy>>,
 }
 
+// Главное хранилище политик
 pub struct PolicyStore {
-    pub raw_store: DashMap<String, Arc<Policy>>,
-    pub snapshot: ArcSwap<PolicySnapshot>,
+    policies: RwLock<HashMap<String, Vec<Policy>>>,
 }
 
 impl PolicyStore {
-    pub fn new_empty() -> Self {
-        let empty_snapshot = Arc::new(PolicySnapshot {
-            by_tool: HashMap::new(),
-            version: 0,
-        });
+    pub fn new() -> Self {
         Self {
-            raw_store: DashMap::new(),
-            snapshot: ArcSwap::new(empty_snapshot),
+            policies: RwLock::new(HashMap::new()),
         }
     }
 
-    pub fn rebuild_snapshot(&self) {
-        let mut new_map: HashMap<String, Vec<Arc<Policy>>> = HashMap::new();
+    pub fn load_from_file(&self, path: &str) -> Result<usize, String> {
+        let content = fs::read_to_string(path).map_err(|e| format!("Failed to read YAML: {}", e))?;
         
-        for entry in self.raw_store.iter() {
-            let policy = entry.value();
-            new_map.entry(policy.tool_name.clone())
-                   .or_insert_with(Vec::new)
-                   .push(Arc::clone(policy));
+        // Парсим наш новый сложный YAML с рекурсивными условиями
+        let config: PolicyConfig = serde_yaml::from_str(&content).map_err(|e| format!("YAML Parse Error: {}", e))?;
+        
+        let mut map: HashMap<String, Vec<Policy>> = HashMap::new();
+        let mut count = 0;
+        
+        for policy in config.policies {
+            map.entry(policy.tool_name.clone())
+                .or_insert_with(Vec::new)
+                .push(policy);
+            count += 1;
         }
-
-        let new_snapshot = PolicySnapshot {
-            by_tool: new_map,
-            version: self.snapshot.load().version + 1,
-        };
         
-        self.snapshot.store(Arc::new(new_snapshot));
+        // Обновляем память
+        let mut write_guard = self.policies.write().unwrap();
+        *write_guard = map;
+        
+        Ok(count)
     }
+
+    pub fn get_snapshot(&self) -> Arc<PolicySnapshot> {
+        let read_guard = self.policies.read().unwrap();
+        Arc::new(PolicySnapshot {
+            by_tool: read_guard.clone(),
+        })
+    }
+}
+
+// Создаем ту самую глобальную переменную, которую искал компилятор
+lazy_static! {
+    pub static ref POLICY_STORE: PolicyStore = PolicyStore::new();
 }
