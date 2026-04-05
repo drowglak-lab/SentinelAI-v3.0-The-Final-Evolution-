@@ -1,6 +1,5 @@
 use crate::models::{Decision, EvaluationResult, Policy, ExecutionMode};
 use std::sync::Arc;
-use std::time::Instant;
 
 pub struct EvaluationEngine {
     pub snapshot: Arc<crate::store::PolicySnapshot>,
@@ -23,6 +22,7 @@ impl EvaluationEngine {
         let mut shadow_state = (Decision::Abstain, "default".to_string());
 
         for policy in policies {
+            // Имитация логики DSL (риск > 0.8 => Deny)
             let current_decision = if context_risk > 0.8 { Decision::Deny } else { Decision::Allow };
 
             match policy.mode {
@@ -44,7 +44,7 @@ impl EvaluationEngine {
             policy_id: enforce_state.1,
             shadow_decision: shadow_state.0,
             shadow_policy_id: shadow_state.1,
-            reason: "Multi-mode evaluation complete".to_string(),
+            reason: "Dual-mode evaluation complete".to_string(),
         }
     }
 }
