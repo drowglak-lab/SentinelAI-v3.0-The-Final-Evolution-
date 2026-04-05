@@ -1,22 +1,17 @@
-version: "1.6"
+version: "2.0"
 policies:
-  - id: "eu_whitelist"
-    tool: "transfer_funds"
-    mode: "shadow"
-    attr_key: "country"
-    operator: "in"
-    value: ["ES", "IT", "FR", "DE"]
-
-  - id: "large_transfer_block"
+  - id: "spanish_high_risk_block"
     tool: "transfer_funds"
     mode: "enforce"
-    attr_key: "risk_score"
-    operator: "gt"
-    value: 0.8
+    condition:
+      and:
+        - atom: { attr_key: "country", operator: "eq", value: "ES" }
+        - or:
+            - atom: { attr_key: "amount", operator: "gt", value: 50000 }
+            - atom: { attr_key: "risk_score", operator: "gt", value: 0.9 }
 
-  - id: "vip_limit_check"
+  - id: "global_whitelist"
     tool: "transfer_funds"
     mode: "shadow"
-    attr_key: "amount"
-    operator: "gt"
-    value: 20000.0
+    condition:
+      atom: { attr_key: "user_tier", operator: "eq", value: "vip" }
