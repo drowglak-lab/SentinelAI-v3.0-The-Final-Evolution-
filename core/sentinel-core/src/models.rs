@@ -36,14 +36,13 @@ pub struct AtomCondition {
     pub value: PolicyValue,
 }
 
-// ⚡ ИСПРАВЛЕНИЕ: Untagged enum, который ищет ключи "and", "or", "atom"
+// ⚡ ИСПРАВЛЕНИЕ: Абсолютно надежная структура вместо Enum
 #[derive(Debug, Serialize, Deserialize, Clone)]
-#[serde(untagged)]
-pub enum Condition {
-    AndMap { and: Vec<Condition> },
-    OrMap { or: Vec<Condition> },
-    NotMap { not: Box<Condition> },
-    AtomMap { atom: AtomCondition },
+pub struct Condition {
+    pub and: Option<Vec<Condition>>,
+    pub or: Option<Vec<Condition>>,
+    pub not: Option<Box<Condition>>,
+    pub atom: Option<AtomCondition>,
 }
 
 #[pyclass]
