@@ -1,12 +1,22 @@
-# policies.yaml
 version: "1.0"
 policies:
   - id: "large_transfer_block"
     tool: "transfer_funds"
     mode: "enforce"
-    condition: { field: "risk_score", operator: "gt", value: 0.8 }
-  
+    attr_key: "risk_score"
+    operator: "gt"
+    threshold: 0.8
+
   - id: "new_user_shadow_check"
     tool: "transfer_funds"
     mode: "shadow"
-    condition: { field: "risk_score", operator: "gt", value: 0.5 }
+    attr_key: "risk_score"
+    operator: "gt"
+    threshold: 0.5
+
+  - id: "vip_limit_check"
+    tool: "transfer_funds"
+    mode: "shadow"
+    attr_key: "amount"
+    operator: "gt"
+    threshold: 10000.0
