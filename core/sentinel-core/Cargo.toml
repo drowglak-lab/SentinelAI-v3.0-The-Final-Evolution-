@@ -8,17 +8,25 @@ name = "sentinel_core"
 crate-type = ["cdylib"]
 
 [dependencies]
-# Main bridge. Version 0.21+ and stable ABI for Python 3.14 support
+# Основной мост между Rust и Python 3.14
 pyo3 = { version = "0.21", features = ["extension-module", "abi3-py312"] }
 
-# Ultra-fast tables for our Store
+# Быстрые таблицы для хранилища политик
 dashmap = "5.5"
 
-# Lock-free снимки памяти (Snapshot Reality)
+# Lock-free снимки памяти
 arc-swap = "1.6"
 
-# Working with the global state
+# Глобальное состояние
 lazy_static = "1.4"
 
-# Serialization (JSON support)
+# Сериализация данных (основной движок)
 serde = { version = "1.0", features = ["derive"] }
+
+# --- Добавленные зависимости для логгера ---
+
+# Для записи событий в формате JSON
+serde_json = "1.0"
+
+# Для генерации точных меток времени (ISO-8601)
+chrono = { version = "0.4", features = ["serde"] }
