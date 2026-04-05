@@ -10,8 +10,8 @@ pub struct EvaluationEngine {
 impl EvaluationEngine {
     fn check_condition(&self, cond: &Condition, context: &HashMap<String, PolicyValue>) -> bool {
         match cond {
-            // ⚡ ИСПРАВЛЕНИЕ: Обращаемся к полям через atom.
-            Condition::Atom(atom) => {
+            // ⚡ ИСПРАВЛЕНИЕ: Обрабатываем новые поля
+            Condition::AtomMap { atom } => {
                 let actual = context.get(&atom.attr_key);
                 match (actual, &atom.value, atom.operator.as_str()) {
                     (Some(PolicyValue::Float(a)), PolicyValue::Float(b), "gt") => a > b,
@@ -23,9 +23,9 @@ impl EvaluationEngine {
                     _ => false,
                 }
             },
-            Condition::And(conds) => conds.iter().all(|c| self.check_condition(c, context)),
-            Condition::Or(conds) => conds.iter().any(|c| self.check_condition(c, context)),
-            Condition::Not(cond) => !self.check_condition(cond, context),
+            Condition::AndMap { and } => and.iter().all(|c| self.check_condition(c, context)),
+            Condition::OrMap { or } => or.iter().any(|c| self.check_condition(c, context)),
+            Condition::NotMap { not } => !self.check_condition(not, context),
         }
     }
 
