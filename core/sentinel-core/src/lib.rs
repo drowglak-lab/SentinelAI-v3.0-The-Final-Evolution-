@@ -15,17 +15,25 @@ lazy_static::lazy_static! {
 }
 
 #[pyfunction]
-fn load_policies(path: String) -> PyResult<()> {
-    let content = fs::read_to_string(path).map_err(|e| PyErr::new::<pyo3::exceptions::PyIOError, _>(e.to_string()))?;
-    let config: models::PolicyConfig = serde_yaml::from_str(&content).map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(e.to_string()))?;
+fn load_policies(path: String) -> PyResult<String> {
+    // 1. Читаем файл (если файла нет - падаем с ошибкой, не трогая память)
+    let content = fs::read_to_string(&path)
+        .map_err(|e| PyErr::new::<pyo3::exceptions::PyIOError, _>(format!("Read error: {}", e)))?;
+
+    // 2. Валидация (Fail-safe): если YAML кривой, возвращаем ошибку Python
+    let config: models::PolicyConfig = serde_yaml::from_str(&content)
+        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("YAML Error: {}", e)))?;
     
-    // Очищаем старые и загружаем новые
+    // 3. Обновление (Atomic-like update)
     GLOBAL_STORE.raw_store.clear();
     for policy in config.policies {
         GLOBAL_STORE.raw_store.insert(policy.id.clone(), Arc::new(policy));
     }
+
+    // 4. Пересборка снимка памяти для быстрых вычислений
     GLOBAL_STORE.rebuild_snapshot();
-    Ok(())
+
+    Ok(format!("SUCCESS: {} policies reloaded. Current version: {}", GLOBAL_STORE.raw_store.len(), config.version))
 }
 
 #[pyfunction]
