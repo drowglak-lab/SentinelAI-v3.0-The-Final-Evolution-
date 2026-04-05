@@ -1,16 +1,15 @@
 use pyo3::prelude::*;
 use serde::{Serialize, Deserialize};
 
-// Единый тип для значений в Контексте и в Политикаx
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
-#[serde(untagged)] // Магия: serde сам поймет, строка это или число
+#[serde(untagged)]
 pub enum PolicyValue {
     Float(f32),
     Str(String),
     Bool(bool),
+    List(Vec<PolicyValue>),
 }
 
-// Позволяем Python передавать эти значения
 impl<'source> FromPyObject<'source> for PolicyValue {
     fn extract_bound(ob: &Bound<'source, PyAny>) -> PyResult<Self> {
         if let Ok(val) = ob.extract::<f32>() {
@@ -19,6 +18,8 @@ impl<'source> FromPyObject<'source> for PolicyValue {
             Ok(PolicyValue::Str(val))
         } else if let Ok(val) = ob.extract::<bool>() {
             Ok(PolicyValue::Bool(val))
+        } else if let Ok(val) = ob.extract::<Vec<PolicyValue>>() {
+            Ok(PolicyValue::List(val))
         } else {
             Err(PyErr::new::<pyo3::exceptions::PyTypeError, _>("Unsupported type"))
         }
@@ -40,8 +41,8 @@ pub struct EvaluationTrace {
     #[pyo3(get)] pub policy_id: String,
     #[pyo3(get)] pub matched: bool,
     #[pyo3(get)] pub attr_key: String,
-    #[pyo3(get)] pub expected: PolicyValue, // Единое поле
-    #[pyo3(get)] pub actual: Option<PolicyValue>, // Единое поле
+    #[pyo3(get)] pub expected: PolicyValue,
+    #[pyo3(get)] pub actual: Option<PolicyValue>,
     #[pyo3(get)] pub mode: ExecutionMode,
 }
 
@@ -64,7 +65,7 @@ pub struct Policy {
     pub mode: ExecutionMode,
     pub attr_key: String,
     pub operator: String, 
-    pub value: PolicyValue, // УНИФИЦИРОВАНО: больше никаких threshold
+    pub value: PolicyValue,
 }
 
 #[derive(Debug, Deserialize)]
