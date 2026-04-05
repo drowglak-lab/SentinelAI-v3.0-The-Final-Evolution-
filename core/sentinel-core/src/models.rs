@@ -36,7 +36,6 @@ pub struct AtomCondition {
     pub value: PolicyValue,
 }
 
-// ⚡ ИСПРАВЛЕНИЕ: Абсолютно надежная структура вместо Enum
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Condition {
     pub and: Option<Vec<Condition>>,
