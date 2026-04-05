@@ -19,6 +19,9 @@ class Context:
     version: str = "unknown"
     traces: List[Any] = field(default_factory=list)
     errors: List[str] = field(default_factory=list)
+    
+    # ⚡ НОВОЕ: Сюда пишем человекочитаемые объяснения
+    reasons: List[str] = field(default_factory=list)
 
 class ContextFactory:
     @staticmethod
