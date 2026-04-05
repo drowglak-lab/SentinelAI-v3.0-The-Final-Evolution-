@@ -1,4 +1,4 @@
-use crate::models::{Decision, EvaluationResult, Policy, ExecutionMode, AttrValue};
+use crate::models::{Decision, EvaluationResult, ExecutionMode, AttrValue};
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -10,7 +10,7 @@ impl EvaluationEngine {
     pub fn evaluate(&self, tool_name: &str, context: &HashMap<String, AttrValue>) -> EvaluationResult {
         let policies = match self.snapshot.by_tool.get(tool_name) {
             Some(p) => p,
-            None => return self.default_deny("No policies found"),
+            None => return self.default_deny("No policies found for this tool"),
         };
 
         let mut enforce_state = (Decision::Abstain, "default".to_string());
@@ -48,7 +48,7 @@ impl EvaluationEngine {
             policy_id: enforce_state.1,
             shadow_decision: shadow_state.0,
             shadow_policy_id: shadow_state.1,
-            reason: "YAML-driven evaluation complete".to_string(),
+            reason: "Context-aware YAML evaluation complete".to_string(),
         }
     }
 
