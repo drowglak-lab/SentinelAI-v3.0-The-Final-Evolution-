@@ -7,7 +7,7 @@ from contextlib import asynccontextmanager
 
 # Импортируем нашу новую архитектуру
 from core.app.context import ContextFactory
-from core.app.stages import RustEvaluationStage, ForensicAuditStage
+from core.app.stages import RustEvaluationStage, ExplainStage, ForensicAuditStage
 from core.app.pipeline import SentinelPipeline
 
 # Настройка логирования
@@ -19,9 +19,10 @@ if not logger.handlers:
         h.setFormatter(logging.Formatter('%(message)s'))
         logger.addHandler(h)
 
-# Инициализируем конвейер
+# ⚡ НОВОЕ: Встраиваем ExplainStage между Rust-ядром и логами
 pipeline = SentinelPipeline([
     RustEvaluationStage(),
+    ExplainStage(),
     ForensicAuditStage()
 ])
 
@@ -52,5 +53,6 @@ async def handle_transfer(payload: dict = Body(...), x_agent_token: str = Header
         "status": ctx.decision,
         "tx_id": ctx.tx_id,
         "policy": ctx.policy_id,
+        "reasons": ctx.reasons, # ⚡ НОВОЕ: Отдаем бизнесу причины блокировки
         "audit": [{"id": t.policy_id, "matched": t.matched} for t in ctx.traces if t.matched]
     }
