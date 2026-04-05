@@ -29,18 +29,21 @@ pub enum ExecutionMode { Enforce, Shadow }
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
 pub enum Decision { Allow, Deny, Abstain }
 
-// НОВОЕ: Рекурсивное дерево условий
+// ⚡ ИСПРАВЛЕНИЕ: Выносим Атом в отдельную структуру
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct AtomCondition {
+    pub attr_key: String,
+    pub operator: String,
+    pub value: PolicyValue,
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "lowercase")]
 pub enum Condition {
     And(Vec<Condition>),
     Or(Vec<Condition>),
     Not(Box<Condition>),
-    Atom {
-        attr_key: String,
-        operator: String,
-        value: PolicyValue,
-    },
+    Atom(AtomCondition), // ⚡ Теперь парсер YAML не будет путаться
 }
 
 #[pyclass]
@@ -68,7 +71,7 @@ pub struct Policy {
     #[serde(rename = "tool")]
     pub tool_name: String,
     pub mode: ExecutionMode,
-    pub condition: Condition, // Заменили плоские поля на дерево
+    pub condition: Condition,
 }
 
 #[derive(Debug, Deserialize)]
