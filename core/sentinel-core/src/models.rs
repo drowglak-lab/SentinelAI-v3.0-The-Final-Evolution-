@@ -10,19 +10,14 @@ pub enum PolicyValue {
     List(Vec<PolicyValue>),
 }
 
+// Вспомогательная реализация для Python (остается прежней)
 impl<'source> FromPyObject<'source> for PolicyValue {
     fn extract_bound(ob: &Bound<'source, PyAny>) -> PyResult<Self> {
-        if let Ok(val) = ob.extract::<f32>() {
-            Ok(PolicyValue::Float(val))
-        } else if let Ok(val) = ob.extract::<String>() {
-            Ok(PolicyValue::Str(val))
-        } else if let Ok(val) = ob.extract::<bool>() {
-            Ok(PolicyValue::Bool(val))
-        } else if let Ok(val) = ob.extract::<Vec<PolicyValue>>() {
-            Ok(PolicyValue::List(val))
-        } else {
-            Err(PyErr::new::<pyo3::exceptions::PyTypeError, _>("Unsupported type"))
-        }
+        if let Ok(val) = ob.extract::<f32>() { Ok(PolicyValue::Float(val)) }
+        else if let Ok(val) = ob.extract::<String>() { Ok(PolicyValue::Str(val)) }
+        else if let Ok(val) = ob.extract::<bool>() { Ok(PolicyValue::Bool(val)) }
+        else if let Ok(val) = ob.extract::<Vec<PolicyValue>>() { Ok(PolicyValue::List(val)) }
+        else { Err(PyErr::new::<pyo3::exceptions::PyTypeError, _>("Unsupported type")) }
     }
 }
 
@@ -35,14 +30,26 @@ pub enum ExecutionMode { Enforce, Shadow }
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
 pub enum Decision { Allow, Deny, Abstain }
 
+// НОВОЕ: Рекурсивное определение условия
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "lowercase")]
+pub enum Condition {
+    And(Vec<Condition>),
+    Or(Vec<Condition>),
+    Not(Box<Condition>),
+    Atom {
+        attr_key: String,
+        operator: String,
+        value: PolicyValue,
+    },
+}
+
 #[pyclass]
 #[derive(Clone, Serialize, Debug)]
 pub struct EvaluationTrace {
     #[pyo3(get)] pub policy_id: String,
     #[pyo3(get)] pub matched: bool,
-    #[pyo3(get)] pub attr_key: String,
-    #[pyo3(get)] pub expected: PolicyValue,
-    #[pyo3(get)] pub actual: Option<PolicyValue>,
+    // В рекурсивной модели мы можем упростить трейс или хранить структуру дерева
     #[pyo3(get)] pub mode: ExecutionMode,
 }
 
@@ -63,9 +70,7 @@ pub struct Policy {
     #[serde(rename = "tool")]
     pub tool_name: String,
     pub mode: ExecutionMode,
-    pub attr_key: String,
-    pub operator: String, 
-    pub value: PolicyValue,
+    pub condition: Condition, // ТЕПЕРЬ ТУТ ДЕРЕВО
 }
 
 #[derive(Debug, Deserialize)]
