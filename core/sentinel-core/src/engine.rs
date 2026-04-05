@@ -9,7 +9,6 @@ pub struct EvaluationEngine {
 
 impl EvaluationEngine {
     fn check_condition(&self, cond: &Condition, context: &HashMap<String, PolicyValue>) -> bool {
-        // ⚡ ИСПРАВЛЕНИЕ: Прямая проверка полей вместо match по enum
         if let Some(atom) = &cond.atom {
             let actual = context.get(&atom.attr_key);
             match (actual, &atom.value, atom.operator.as_str()) {
@@ -28,7 +27,7 @@ impl EvaluationEngine {
         } else if let Some(not_cond) = &cond.not {
             !self.check_condition(not_cond, context)
         } else {
-            false // Пустое условие
+            false
         }
     }
 
