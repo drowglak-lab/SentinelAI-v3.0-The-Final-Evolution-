@@ -1,21 +1,24 @@
 use pyo3::prelude::*;
 use serde::{Serialize, Deserialize};
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub enum AttrValue {
+// Единый тип для значений в Контексте и в Политикаx
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+#[serde(untagged)] // Магия: serde сам поймет, строка это или число
+pub enum PolicyValue {
     Float(f32),
     Str(String),
     Bool(bool),
 }
 
-impl<'source> FromPyObject<'source> for AttrValue {
+// Позволяем Python передавать эти значения
+impl<'source> FromPyObject<'source> for PolicyValue {
     fn extract_bound(ob: &Bound<'source, PyAny>) -> PyResult<Self> {
         if let Ok(val) = ob.extract::<f32>() {
-            Ok(AttrValue::Float(val))
+            Ok(PolicyValue::Float(val))
         } else if let Ok(val) = ob.extract::<String>() {
-            Ok(AttrValue::Str(val))
+            Ok(PolicyValue::Str(val))
         } else if let Ok(val) = ob.extract::<bool>() {
-            Ok(AttrValue::Bool(val))
+            Ok(PolicyValue::Bool(val))
         } else {
             Err(PyErr::new::<pyo3::exceptions::PyTypeError, _>("Unsupported type"))
         }
@@ -37,15 +40,12 @@ pub struct EvaluationTrace {
     #[pyo3(get)] pub policy_id: String,
     #[pyo3(get)] pub matched: bool,
     #[pyo3(get)] pub attr_key: String,
-    #[pyo3(get)] pub threshold: f32,
-    #[pyo3(get)] pub actual_value: f32,
-    #[pyo3(get)] pub actual_str: Option<String>,   // <-- НОВОЕ: для аудита строк
-    #[pyo3(get)] pub expected_str: Option<String>, // <-- НОВОЕ
+    #[pyo3(get)] pub expected: PolicyValue, // Единое поле
+    #[pyo3(get)] pub actual: Option<PolicyValue>, // Единое поле
     #[pyo3(get)] pub mode: ExecutionMode,
 }
 
 #[pyclass]
-#[derive(Clone)]
 pub struct EvaluationResult {
     #[pyo3(get)] pub decision: Decision,
     #[pyo3(get)] pub policy_id: String,
@@ -64,8 +64,7 @@ pub struct Policy {
     pub mode: ExecutionMode,
     pub attr_key: String,
     pub operator: String, 
-    pub threshold: f32,
-    pub target_val: Option<String>, // <-- НОВОЕ: здесь будет лежать "ES", "RU" и т.д.
+    pub value: PolicyValue, // УНИФИЦИРОВАНО: больше никаких threshold
 }
 
 #[derive(Debug, Deserialize)]
