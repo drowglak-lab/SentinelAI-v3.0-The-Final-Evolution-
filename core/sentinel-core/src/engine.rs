@@ -1,31 +1,41 @@
-use crate::models::{Decision, EvaluationResult, ExecutionMode, AttrValue};
+use crate::models::{Decision, EvaluationResult, ExecutionMode, AttrValue, EvaluationTrace};
 use std::collections::HashMap;
 use std::sync::Arc;
 
 pub struct EvaluationEngine {
     pub snapshot: Arc<crate::store::PolicySnapshot>,
+    pub version: String,
 }
 
 impl EvaluationEngine {
     pub fn evaluate(&self, tool_name: &str, context: &HashMap<String, AttrValue>) -> EvaluationResult {
         let policies = match self.snapshot.by_tool.get(tool_name) {
             Some(p) => p,
-            None => return self.default_deny("No policies found for this tool"),
+            None => return self.default_deny("No policies found"),
         };
 
         let mut enforce_state = (Decision::Abstain, "default".to_string());
         let mut shadow_state = (Decision::Abstain, "default".to_string());
+        let mut traces = Vec::new();
 
         for policy in policies {
-            let is_match = if let Some(AttrValue::Float(val)) = context.get(&policy.attr_key) {
-                match policy.operator.as_str() {
-                    "gt" => *val > policy.threshold,
-                    "lt" => *val < policy.threshold,
-                    _ => false,
-                }
-            } else {
-                false
+            let actual_val = if let Some(AttrValue::Float(v)) = context.get(&policy.attr_key) { *v } else { 0.0 };
+            
+            let is_match = match policy.operator.as_str() {
+                "gt" => actual_val > policy.threshold,
+                "lt" => actual_val < policy.threshold,
+                _ => false,
             };
+
+            // Сохраняем след
+            traces.push(EvaluationTrace {
+                policy_id: policy.id.clone(),
+                matched: is_match,
+                attr_key: policy.attr_key.clone(),
+                threshold: policy.threshold,
+                actual_value: actual_val,
+                mode: policy.mode,
+            });
 
             let current_decision = if is_match { Decision::Deny } else { Decision::Allow };
 
@@ -48,7 +58,9 @@ impl EvaluationEngine {
             policy_id: enforce_state.1,
             shadow_decision: shadow_state.0,
             shadow_policy_id: shadow_state.1,
-            reason: "Context-aware YAML evaluation complete".to_string(),
+            reason: "Explainable evaluation complete".to_string(),
+            version: self.version.clone(),
+            traces,
         }
     }
 
@@ -59,6 +71,8 @@ impl EvaluationEngine {
             shadow_decision: Decision::Deny,
             shadow_policy_id: "system".to_string(),
             reason: reason.to_string(),
+            version: self.version.clone(),
+            traces: Vec::new(),
         }
     }
 }
