@@ -1,4 +1,4 @@
-use crate::models::{Decision, EvaluationResult, ExecutionMode, PolicyValue, EvaluationTrace};
+use crate::models::{Decision, EvaluationResult, ExecutionMode, PolicyValue, EvaluationTrace, Condition};
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -8,6 +8,27 @@ pub struct EvaluationEngine {
 }
 
 impl EvaluationEngine {
+    // РЕКУРСИВНЫЙ МАТЧЕР
+    fn check_condition(&self, cond: &Condition, context: &HashMap<String, PolicyValue>) -> bool {
+        match cond {
+            Condition::Atom { attr_key, operator, value } => {
+                let actual = context.get(attr_key);
+                match (actual, value, operator.as_str()) {
+                    (Some(PolicyValue::Float(a)), PolicyValue::Float(b), "gt") => a > b,
+                    (Some(PolicyValue::Float(a)), PolicyValue::Float(b), "lt") => a < b,
+                    (Some(PolicyValue::Str(a)), PolicyValue::Str(b), "eq") => a == b,
+                    (Some(PolicyValue::Str(a)), PolicyValue::Str(b), "contains") => a.contains(b),
+                    (Some(val), PolicyValue::List(list), "in") => list.contains(val),
+                    (Some(val), PolicyValue::List(list), "not_in") => !list.contains(val),
+                    _ => false,
+                }
+            },
+            Condition::And(sub_conds) => sub_conds.iter().all(|c| self.check_condition(c, context)),
+            Condition::Or(sub_conds) => sub_conds.iter().any(|c| self.check_condition(c, context)),
+            Condition::Not(sub_cond) => !self.check_condition(sub_cond, context),
+        }
+    }
+
     pub fn evaluate(&self, tool_name: &str, context: &HashMap<String, PolicyValue>) -> EvaluationResult {
         let policies = match self.snapshot.by_tool.get(tool_name) {
             Some(p) => p,
@@ -19,24 +40,11 @@ impl EvaluationEngine {
         let mut traces = Vec::new();
 
         for policy in policies {
-            let actual_val = context.get(&policy.attr_key);
-            
-            let is_match = match (actual_val, &policy.value, policy.operator.as_str()) {
-                (Some(PolicyValue::Float(a)), PolicyValue::Float(b), "gt") => a > b,
-                (Some(PolicyValue::Float(a)), PolicyValue::Float(b), "lt") => a < b,
-                (Some(PolicyValue::Str(a)), PolicyValue::Str(b), "eq") => a == b,
-                (Some(PolicyValue::Str(a)), PolicyValue::Str(b), "contains") => a.contains(b),
-                (Some(val), PolicyValue::List(list), "in") => list.contains(val),
-                (Some(val), PolicyValue::List(list), "not_in") => !list.contains(val),
-                _ => false, 
-            };
+            let is_match = self.check_condition(&policy.condition, context);
 
             traces.push(EvaluationTrace {
                 policy_id: policy.id.clone(),
                 matched: is_match,
-                attr_key: policy.attr_key.clone(),
-                expected: policy.value.clone(),
-                actual: actual_val.cloned(),
                 mode: policy.mode,
             });
 
@@ -61,7 +69,7 @@ impl EvaluationEngine {
             policy_id: enforce_state.1,
             shadow_decision: shadow_state.0,
             shadow_policy_id: shadow_state.1,
-            reason: "Multi-type evaluation complete".to_string(),
+            reason: "Logic tree evaluation complete".to_string(),
             version: self.version.clone(),
             traces,
         }
