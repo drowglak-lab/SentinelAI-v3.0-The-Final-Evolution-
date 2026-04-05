@@ -1,6 +1,7 @@
 use pyo3::prelude::*;
 use std::sync::Arc;
 use std::collections::HashMap;
+use std::fs;
 use chrono::Utc;
 
 mod models;
@@ -14,10 +15,15 @@ lazy_static::lazy_static! {
 }
 
 #[pyfunction]
-#[pyo3(signature = (id, tool_name, attr_key, threshold, mode = models::ExecutionMode::Enforce))]
-fn add_policy(id: String, tool_name: String, attr_key: String, threshold: f32, mode: models::ExecutionMode) -> PyResult<()> {
-    let policy = Arc::new(models::Policy { id, tool_name, attr_key, threshold, mode });
-    GLOBAL_STORE.raw_store.insert(policy.id.clone(), policy);
+fn load_policies(path: String) -> PyResult<()> {
+    let content = fs::read_to_string(path).map_err(|e| PyErr::new::<pyo3::exceptions::PyIOError, _>(e.to_string()))?;
+    let config: models::PolicyConfig = serde_yaml::from_str(&content).map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(e.to_string()))?;
+    
+    // Очищаем старые и загружаем новые
+    GLOBAL_STORE.raw_store.clear();
+    for policy in config.policies {
+        GLOBAL_STORE.raw_store.insert(policy.id.clone(), Arc::new(policy));
+    }
     GLOBAL_STORE.rebuild_snapshot();
     Ok(())
 }
@@ -28,10 +34,8 @@ fn fast_evaluate(tool_name: String, context: HashMap<String, models::AttrValue>)
     let start_time = std::time::Instant::now();
     let snapshot = GLOBAL_STORE.snapshot.load_full();
     let engine = engine::EvaluationEngine { snapshot };
-    
     let result = engine.evaluate(&tool_name, &context);
-    
-    // Пытаемся достать риск для логов, если он есть в контексте
+
     let risk_log = if let Some(models::AttrValue::Float(r)) = context.get("risk_score") { *r } else { 0.0 };
 
     let entry = logger::AuditEntry {
@@ -54,7 +58,7 @@ fn sentinel_core(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<models::Decision>()?;
     m.add_class::<models::ExecutionMode>()?;
     m.add_class::<models::EvaluationResult>()?;
-    m.add_function(wrap_pyfunction!(add_policy, m)?)?;
+    m.add_function(wrap_pyfunction!(load_policies, m)?)?;
     m.add_function(wrap_pyfunction!(fast_evaluate, m)?)?;
     Ok(())
 }
