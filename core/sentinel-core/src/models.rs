@@ -17,7 +17,7 @@ impl<'source> FromPyObject<'source> for AttrValue {
         } else if let Ok(val) = ob.extract::<bool>() {
             Ok(AttrValue::Bool(val))
         } else {
-            Err(PyErr::new::<pyo3::exceptions::PyTypeError, _>("Unsupported context type"))
+            Err(PyErr::new::<pyo3::exceptions::PyTypeError, _>("Unsupported type"))
         }
     }
 }
@@ -31,13 +31,28 @@ pub enum ExecutionMode { Enforce, Shadow }
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
 pub enum Decision { Allow, Deny, Abstain }
 
+// НОВАЯ СТРУКТУРА: Трассировка конкретного правила
 #[pyclass]
+#[derive(Clone, Serialize, Debug)]
+pub struct EvaluationTrace {
+    #[pyo3(get)] pub policy_id: String,
+    #[pyo3(get)] pub matched: bool,
+    #[pyo3(get)] pub attr_key: String,
+    #[pyo3(get)] pub threshold: f32,
+    #[pyo3(get)] pub actual_value: f32,
+    #[pyo3(get)] pub mode: ExecutionMode,
+}
+
+#[pyclass]
+#[derive(Clone)]
 pub struct EvaluationResult {
     #[pyo3(get)] pub decision: Decision,
     #[pyo3(get)] pub policy_id: String,
     #[pyo3(get)] pub shadow_decision: Decision,
     #[pyo3(get)] pub shadow_policy_id: String,
     #[pyo3(get)] pub reason: String,
+    #[pyo3(get)] pub version: String,
+    #[pyo3(get)] pub traces: Vec<EvaluationTrace>, // Список всех проверок
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -53,6 +68,6 @@ pub struct Policy {
 
 #[derive(Debug, Deserialize)]
 pub struct PolicyConfig {
-    pub version: String, // <--- ТЕПЕРЬ ПОЛЕ ЕСТЬ
+    pub version: String,
     pub policies: Vec<Policy>,
 }
