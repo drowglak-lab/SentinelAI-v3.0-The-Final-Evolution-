@@ -1,7 +1,7 @@
 use pyo3::prelude::*;
 
 #[pyclass]
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)] // PartialEq обязателен для сравнения в engine.rs
 pub enum Decision {
     Allow,
     Deny,
@@ -9,6 +9,7 @@ pub enum Decision {
 }
 
 #[pyclass]
+#[derive(Clone)]
 pub struct EvaluationResult {
     #[pyo3(get)]
     pub decision: Decision,
@@ -18,11 +19,17 @@ pub struct EvaluationResult {
     pub reason: String,
 }
 
-// We include support for methods so that objects are useful in Python
 #[pymethods]
 impl EvaluationResult {
     #[new]
-    fn new(decision: Decision, policy_id: String, reason: String) -> Self {
+    pub fn new(decision: Decision, policy_id: String, reason: String) -> Self {
         EvaluationResult { decision, policy_id, reason }
     }
+}
+
+// Общая структура политики, которую будут использовать все модули
+pub struct Policy {
+    pub id: String,
+    pub tool_name: String,
+    pub priority: u32,
 }
