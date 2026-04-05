@@ -14,17 +14,14 @@ fn load_policies(path: String) -> PyResult<String> {
 }
 
 #[pyfunction]
-// ТЕПЕРЬ ИСПОЛЬЗУЕМ PolicyValue ВМЕСТО AttrValue
 fn fast_evaluate(tool_name: String, context: HashMap<String, models::PolicyValue>) -> PyResult<models::EvaluationResult> {
     let snapshot = store::POLICY_STORE.get_snapshot();
     
-    // ДОБАВИЛИ ПОЛЕ version
     let engine = engine::EvaluationEngine { 
         snapshot,
         version: "3.0".to_string() 
     };
 
-    // Исправили старую проверку на новый тип PolicyValue (строка 44 из твоей ошибки)
     let _risk_log = if let Some(models::PolicyValue::Float(r)) = context.get("risk_score") { *r } else { 0.0 };
 
     Ok(engine.evaluate(&tool_name, &context))
