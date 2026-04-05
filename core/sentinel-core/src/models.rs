@@ -21,6 +21,7 @@ pub enum Decision {
 pub struct EvaluationResult {
     #[pyo3(get)] pub decision: Decision,
     #[pyo3(get)] pub policy_id: String,
+    // Новые поля для Shadow Mode
     #[pyo3(get)] pub shadow_decision: Decision,
     #[pyo3(get)] pub shadow_policy_id: String,
     #[pyo3(get)] pub reason: String,
@@ -30,5 +31,5 @@ pub struct Policy {
     pub id: String,
     pub tool_name: String,
     pub priority: u32,
-    pub mode: ExecutionMode,
+    pub mode: ExecutionMode, // Каждая политика теперь знает свой режим
 }
