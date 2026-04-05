@@ -9,23 +9,26 @@ pub struct EvaluationEngine {
 
 impl EvaluationEngine {
     fn check_condition(&self, cond: &Condition, context: &HashMap<String, PolicyValue>) -> bool {
-        match cond {
-            // ⚡ ИСПРАВЛЕНИЕ: Обрабатываем новые поля
-            Condition::AtomMap { atom } => {
-                let actual = context.get(&atom.attr_key);
-                match (actual, &atom.value, atom.operator.as_str()) {
-                    (Some(PolicyValue::Float(a)), PolicyValue::Float(b), "gt") => a > b,
-                    (Some(PolicyValue::Float(a)), PolicyValue::Float(b), "lt") => a < b,
-                    (Some(PolicyValue::Str(a)), PolicyValue::Str(b), "eq") => a == b,
-                    (Some(PolicyValue::Str(a)), PolicyValue::Str(b), "contains") => a.contains(b),
-                    (Some(val), PolicyValue::List(list), "in") => list.contains(val),
-                    (Some(val), PolicyValue::List(list), "not_in") => !list.contains(val),
-                    _ => false,
-                }
-            },
-            Condition::AndMap { and } => and.iter().all(|c| self.check_condition(c, context)),
-            Condition::OrMap { or } => or.iter().any(|c| self.check_condition(c, context)),
-            Condition::NotMap { not } => !self.check_condition(not, context),
+        // ⚡ ИСПРАВЛЕНИЕ: Прямая проверка полей вместо match по enum
+        if let Some(atom) = &cond.atom {
+            let actual = context.get(&atom.attr_key);
+            match (actual, &atom.value, atom.operator.as_str()) {
+                (Some(PolicyValue::Float(a)), PolicyValue::Float(b), "gt") => a > b,
+                (Some(PolicyValue::Float(a)), PolicyValue::Float(b), "lt") => a < b,
+                (Some(PolicyValue::Str(a)), PolicyValue::Str(b), "eq") => a == b,
+                (Some(PolicyValue::Str(a)), PolicyValue::Str(b), "contains") => a.contains(b),
+                (Some(val), PolicyValue::List(list), "in") => list.contains(val),
+                (Some(val), PolicyValue::List(list), "not_in") => !list.contains(val),
+                _ => false,
+            }
+        } else if let Some(and_conds) = &cond.and {
+            and_conds.iter().all(|c| self.check_condition(c, context))
+        } else if let Some(or_conds) = &cond.or {
+            or_conds.iter().any(|c| self.check_condition(c, context))
+        } else if let Some(not_cond) = &cond.not {
+            !self.check_condition(not_cond, context)
+        } else {
+            false // Пустое условие
         }
     }
 
