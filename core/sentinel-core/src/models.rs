@@ -10,7 +10,6 @@ pub enum PolicyValue {
     List(Vec<PolicyValue>),
 }
 
-// Вспомогательная реализация для Python (остается прежней)
 impl<'source> FromPyObject<'source> for PolicyValue {
     fn extract_bound(ob: &Bound<'source, PyAny>) -> PyResult<Self> {
         if let Ok(val) = ob.extract::<f32>() { Ok(PolicyValue::Float(val)) }
@@ -30,7 +29,7 @@ pub enum ExecutionMode { Enforce, Shadow }
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
 pub enum Decision { Allow, Deny, Abstain }
 
-// НОВОЕ: Рекурсивное определение условия
+// НОВОЕ: Рекурсивное дерево условий
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "lowercase")]
 pub enum Condition {
@@ -49,7 +48,6 @@ pub enum Condition {
 pub struct EvaluationTrace {
     #[pyo3(get)] pub policy_id: String,
     #[pyo3(get)] pub matched: bool,
-    // В рекурсивной модели мы можем упростить трейс или хранить структуру дерева
     #[pyo3(get)] pub mode: ExecutionMode,
 }
 
@@ -70,7 +68,7 @@ pub struct Policy {
     #[serde(rename = "tool")]
     pub tool_name: String,
     pub mode: ExecutionMode,
-    pub condition: Condition, // ТЕПЕРЬ ТУТ ДЕРЕВО
+    pub condition: Condition, // Заменили плоские поля на дерево
 }
 
 #[derive(Debug, Deserialize)]
