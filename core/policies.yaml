@@ -1,4 +1,4 @@
-version: "1.0"
+version: "1.2"
 policies:
   - id: "large_transfer_block"
     tool: "transfer_funds"
