@@ -1,23 +1,22 @@
-version: "1.3"
+version: "1.5"
 policies:
   - id: "large_transfer_block"
     tool: "transfer_funds"
     mode: "enforce"
     attr_key: "risk_score"
     operator: "gt"
-    threshold: 0.8
+    value: 0.8
 
-  - id: "spain_geo_check" # 🇪🇸 Новое строковое правило
+  - id: "spain_geo_check"
     tool: "transfer_funds"
     mode: "shadow"
     attr_key: "country"
     operator: "eq"
-    threshold: 0.0
-    target_val: "ES"
+    value: "ES"
 
   - id: "vip_limit_check"
     tool: "transfer_funds"
     mode: "shadow"
     attr_key: "amount"
     operator: "gt"
-    threshold: 10000.0
+    value: 20000.0
