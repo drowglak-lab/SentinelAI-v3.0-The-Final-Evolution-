@@ -31,7 +31,6 @@ pub enum ExecutionMode { Enforce, Shadow }
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
 pub enum Decision { Allow, Deny, Abstain }
 
-// НОВАЯ СТРУКТУРА: Трассировка конкретного правила
 #[pyclass]
 #[derive(Clone, Serialize, Debug)]
 pub struct EvaluationTrace {
@@ -40,6 +39,8 @@ pub struct EvaluationTrace {
     #[pyo3(get)] pub attr_key: String,
     #[pyo3(get)] pub threshold: f32,
     #[pyo3(get)] pub actual_value: f32,
+    #[pyo3(get)] pub actual_str: Option<String>,   // <-- НОВОЕ: для аудита строк
+    #[pyo3(get)] pub expected_str: Option<String>, // <-- НОВОЕ
     #[pyo3(get)] pub mode: ExecutionMode,
 }
 
@@ -52,7 +53,7 @@ pub struct EvaluationResult {
     #[pyo3(get)] pub shadow_policy_id: String,
     #[pyo3(get)] pub reason: String,
     #[pyo3(get)] pub version: String,
-    #[pyo3(get)] pub traces: Vec<EvaluationTrace>, // Список всех проверок
+    #[pyo3(get)] pub traces: Vec<EvaluationTrace>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -64,6 +65,7 @@ pub struct Policy {
     pub attr_key: String,
     pub operator: String, 
     pub threshold: f32,
+    pub target_val: Option<String>, // <-- НОВОЕ: здесь будет лежать "ES", "RU" и т.д.
 }
 
 #[derive(Debug, Deserialize)]
