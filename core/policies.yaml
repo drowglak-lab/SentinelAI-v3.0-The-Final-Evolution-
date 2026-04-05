@@ -7,11 +7,11 @@ policies:
       and:
         - atom: { attr_key: "country", operator: "eq", value: "ES" }
         - or:
-            - atom: { attr_key: "amount", operator: "gt", value: 50000 }
-            - atom: { attr_key: "risk_score", operator: "gt", value: 0.9 }
+            - atom: { attr_key: "amount", operator: "gt", value: 20000 }
+            - atom: { attr_key: "risk_score", operator: "gt", value: 0.8 }
 
-  - id: "global_whitelist"
+  - id: "eu_whitelist"
     tool: "transfer_funds"
     mode: "shadow"
     condition:
-      atom: { attr_key: "user_tier", operator: "eq", value: "vip" }
+      atom: { attr_key: "country", operator: "in", value: ["IT", "FR", "DE"] }
