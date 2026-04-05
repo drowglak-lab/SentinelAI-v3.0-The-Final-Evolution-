@@ -9,7 +9,6 @@ pub enum AttrValue {
     Bool(bool),
 }
 
-// Позволяет PyO3 автоматически конвертировать типы из Python в этот Enum
 impl<'source> FromPyObject<'source> for AttrValue {
     fn extract_bound(ob: &Bound<'source, PyAny>) -> PyResult<Self> {
         if let Ok(val) = ob.extract::<f32>() {
@@ -19,13 +18,14 @@ impl<'source> FromPyObject<'source> for AttrValue {
         } else if let Ok(val) = ob.extract::<bool>() {
             Ok(AttrValue::Bool(val))
         } else {
-            Err(PyErr::new::<pyo3::exceptions::PyTypeError, _>("Unsupported context type"))
+            Err(PyErr::new::<pyo3::exceptions::PyTypeError, _>("Unsupported type"))
         }
     }
 }
 
 #[pyclass]
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
 pub enum ExecutionMode { Enforce, Shadow }
 
 #[pyclass]
@@ -33,7 +33,6 @@ pub enum ExecutionMode { Enforce, Shadow }
 pub enum Decision { Allow, Deny, Abstain }
 
 #[pyclass]
-#[derive(Clone)]
 pub struct EvaluationResult {
     #[pyo3(get)] pub decision: Decision,
     #[pyo3(get)] pub policy_id: String,
@@ -42,10 +41,18 @@ pub struct EvaluationResult {
     #[pyo3(get)] pub reason: String,
 }
 
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Policy {
     pub id: String,
+    #[serde(rename = "tool")]
     pub tool_name: String,
     pub mode: ExecutionMode,
-    pub attr_key: String, // Какое поле проверяем (напр. "risk_score")
-    pub threshold: f32,   // Порог для этого поля
+    pub attr_key: String,
+    pub operator: String, // "gt", "lt", etc.
+    pub threshold: f32,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct PolicyConfig {
+    pub policies: Vec<Policy>,
 }
