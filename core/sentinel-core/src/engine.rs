@@ -10,22 +10,19 @@ impl EvaluationEngine {
     pub fn evaluate(&self, tool_name: &str, context: &HashMap<String, AttrValue>) -> EvaluationResult {
         let policies = match self.snapshot.by_tool.get(tool_name) {
             Some(p) => p,
-            None => return EvaluationResult {
-                decision: Decision::Deny,
-                policy_id: "system".to_string(),
-                shadow_decision: Decision::Deny,
-                shadow_policy_id: "system".to_string(),
-                reason: "No policies found".to_string(),
-            },
+            None => return self.default_deny("No policies found"),
         };
 
         let mut enforce_state = (Decision::Abstain, "default".to_string());
         let mut shadow_state = (Decision::Abstain, "default".to_string());
 
         for policy in policies {
-            // Ищем значение в контексте. Если нашли Float — сравниваем.
             let is_match = if let Some(AttrValue::Float(val)) = context.get(&policy.attr_key) {
-                *val > policy.threshold
+                match policy.operator.as_str() {
+                    "gt" => *val > policy.threshold,
+                    "lt" => *val < policy.threshold,
+                    _ => false,
+                }
             } else {
                 false
             };
@@ -51,7 +48,17 @@ impl EvaluationEngine {
             policy_id: enforce_state.1,
             shadow_decision: shadow_state.0,
             shadow_policy_id: shadow_state.1,
-            reason: "Context-aware evaluation complete".to_string(),
+            reason: "YAML-driven evaluation complete".to_string(),
+        }
+    }
+
+    fn default_deny(&self, reason: &str) -> EvaluationResult {
+        EvaluationResult {
+            decision: Decision::Deny,
+            policy_id: "system".to_string(),
+            shadow_decision: Decision::Deny,
+            shadow_policy_id: "system".to_string(),
+            reason: reason.to_string(),
         }
     }
 }
