@@ -12,17 +12,17 @@ def build_financial_risk(amount: float, user_tier: str) -> float:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Основная политика (Enforce)
-    sentinel_core.add_policy("fin_limit_high", "transfer_funds", 500, sentinel_core.ExecutionMode.Enforce)
+    # Теперь при добавлении политики указываем, какой атрибут проверять
+    # Напр: проверяем "risk_score" с порогом 0.8
+    sentinel_core.add_policy("fin_limit_high", "transfer_funds", "risk_score", 0.8, sentinel_core.ExecutionMode.Enforce)
     
-    # Теневая экспериментальная политика 🚩
-    # Мы тестируем ее в Shadow Mode, чтобы не мешать бизнесу
-    sentinel_core.add_policy("exp_v2_rules", "transfer_funds", 999, sentinel_core.ExecutionMode.Shadow)
+    # Теневая политика: проверяет тот же "risk_score", но с порогом 0.5
+    sentinel_core.add_policy("exp_v2_rules", "transfer_funds", "risk_score", 0.5, sentinel_core.ExecutionMode.Shadow)
     
-    print("🛡️ [Sentinel] Hybrid Mode active: Enforce + Shadow.")
+    print("🛡️ [Sentinel] Context-aware Hybrid Mode active.")
     yield
 
-app = FastAPI(title="SentinelAI v3.0: Financial Guard", lifespan=lifespan)
+app = FastAPI(title="SentinelAI v3.0", lifespan=lifespan)
 
 @app.post("/v1/banking/transfer")
 async def handle_transfer(payload: dict = Body(...), x_agent_token: str = Header(None)):
@@ -31,14 +31,18 @@ async def handle_transfer(payload: dict = Body(...), x_agent_token: str = Header
 
     amount = payload.get("amount", 0.0)
     user_tier = payload.get("user_tier", "standard")
-    
-    clean_prompt = scrub_pii(payload.get("prompt", ""))
     current_risk = build_financial_risk(amount, user_tier)
 
-    # Вызов Rust-ядра (двойной проход внутри)
-    result = sentinel_core.fast_evaluate(tool_name="transfer_funds", risk=current_risk)
+    # СОБИРАЕМ КОНТЕКСТ 🧠
+    context = {
+        "risk_score": current_risk,
+        "amount": float(amount),
+        "is_new_user": user_tier == "new"
+    }
 
-    # Детектор Policy Drift (Дрейфа политик)
+    # Передаем словарь в Rust
+    result = sentinel_core.fast_evaluate(tool_name="transfer_funds", context=context)
+
     if result.decision != result.shadow_decision:
         print(f"⚠️ [DRIFT] Shadow logic disagreed! Policy: {result.shadow_policy_id}")
 
