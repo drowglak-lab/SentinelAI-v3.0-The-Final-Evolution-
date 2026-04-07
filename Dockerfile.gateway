@@ -1,0 +1,37 @@
+# Этап 1: Сборка Rust-ядра
+FROM python:3.11-slim as builder
+
+# Устанавливаем инструменты для компиляции Rust
+RUN apt-get update && apt-get install -y \
+    curl build-essential gcc \
+    && curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+ENV PATH="/root/.cargo/bin:${PATH}"
+
+WORKDIR /build
+COPY core/sentinel-core ./core/sentinel-core
+
+# Устанавливаем maturin и собираем ядро
+RUN pip install maturin
+WORKDIR /build/core/sentinel-core
+RUN maturin build --release --out /build/dist
+
+# Этап 2: Финальный образ
+FROM python:3.11-slim
+WORKDIR /app
+
+# Копируем зависимости и ставим их
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Устанавливаем скомпилированное Rust-ядро из первого этапа
+COPY --from=builder /build/dist/*.whl .
+RUN pip install *.whl && rm *.whl
+
+# Копируем остальной код
+COPY . .
+
+# Открываем порт шлюза
+EXPOSE 8000
+
+# Запускаем через uvicorn
+CMD ["uvicorn", "core.gateway:app", "--host", "0.0.0.0", "--port", "8000"]
