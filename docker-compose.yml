@@ -1,24 +1,26 @@
+version: '3.8'
+
 services:
-  sentinel-gateway:
-    build: 
+  siem:
+    build:
       context: .
-      dockerfile: Dockerfile
-    image: sentinel-ai-gateway:v3.0
-    container_name: sentinel_control_plane
+      dockerfile: Dockerfile.siem
+    ports:
+      - "9000:9000"
+    volumes:
+      - ./data:/app/data
+    environment:
+      - DB_PATH=/app/data/audit_siem.db
+    restart: always
+
+  gateway:
+    build:
+      context: .
+      dockerfile: Dockerfile.gateway
     ports:
       - "8000:8000"
+    depends_on:
+      - siem
     environment:
-      - ENVIRONMENT=production
-      - LOG_LEVEL=info
-    # Restrict resources to prevent a single compromised container from crashing the host node
-    deploy:
-      resources:
-        limits:
-          cpus: '2.0'
-          memory: 1G
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/docs"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
+      - SIEM_URL=http://siem:9000
+    restart: always
