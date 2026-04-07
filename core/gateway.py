@@ -3,12 +3,12 @@ import logging
 import sys
 import json
 import asyncio
-import httpx  # Добавили для общения с SIEM
+import httpx
+import os  # Добавили для работы с переменными окружения
 from fastapi import FastAPI, Header, HTTPException, Body
 from contextlib import asynccontextmanager
 
 from core.app.context import ContextFactory
-# Добавили merkle_manager в импорт
 from core.app.stages import (
     EnrichmentStage, RustEvaluationStage, ExplainStage, 
     ForensicAuditStage, periodic_flush, retry_worker, merkle_manager
@@ -28,6 +28,9 @@ pipeline = SentinelPipeline([EnrichmentStage(), RustEvaluationStage(), ExplainSt
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # ПЕРЕМЕННАЯ ОКРУЖЕНИЯ: В Docker это http://siem:9000, локально — 127.0.0.1
+    SIEM_URL = os.getenv("SIEM_URL", "http://127.0.0.1:9000")
+    
     try:
         # 1. Проверка целостности политик
         policy_hash = verify_policy_integrity()
@@ -37,18 +40,16 @@ async def lifespan(app: FastAPI):
         # 2. ⚡ Синхронизация цепочки хэшей с SIEM
         async with httpx.AsyncClient() as client:
             try:
-                # Спрашиваем у базы SIEM последний записанный корень
-                response = await client.get("http://127.0.0.1:9000/latest", timeout=2.0)
+                response = await client.get(f"{SIEM_URL}/latest", timeout=2.0)
                 if response.status_code == 200:
                     latest_root = response.json().get("latest_root")
                     if latest_root and latest_root != "0" * 64:
-                        # Устанавливаем хэш в менеджер, чтобы продолжить цепь
                         merkle_manager.prev_root = latest_root
                         logger.info(f"[SYNC] Chain resumed from SIEM state: {latest_root[:12]}")
                     else:
-                        logger.info("[SYNC] SIEM is empty. Starting a new chain.")
+                        logger.info("[SYNC] SIEM is empty or fresh. Starting a new chain.")
             except Exception as e:
-                logger.warning(f"[SYNC_FAILED] SIEM unreachable for sync: {e}. Starting from zero.")
+                logger.warning(f"[SYNC_FAILED] SIEM unreachable at {SIEM_URL}: {e}")
 
         # 3. Запуск фоновых воркеров
         tasks = [
@@ -63,7 +64,6 @@ async def lifespan(app: FastAPI):
             
     except SecurityTamperingException as e:
         logger.error(json.dumps({"event": "FATAL_ERROR", "reason": str(e)}))
-        # Важно: система не должна запускаться при нарушении подписи
         raise RuntimeError("System halted due to integrity failure.")
 
 app = FastAPI(title="SentinelAI v3.0", lifespan=lifespan)
