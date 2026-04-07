@@ -10,6 +10,9 @@ from core.crypto_audit import MerkleManager
 
 logger = logging.getLogger("sentinel-ai")
 
+# Настройки инфраструктуры
+SIEM_URL = os.getenv("SIEM_URL", "http://127.0.0.1:9000")
+
 # Настройки аудита
 AUDIT_BUFFER = []
 AUDIT_LOCK = asyncio.Lock()
@@ -33,10 +36,11 @@ async def flush_batch(batch: list):
     
     async with httpx.AsyncClient() as client:
         try:
-            await client.post("http://127.0.0.1:9000/ingest", json=payload, timeout=2.0)
+            # Используем динамический URL
+            await client.post(f"{SIEM_URL}/ingest", json=payload, timeout=2.0)
             merkle_manager.prev_root = chain_hash # Синхронизируем цепь
         except Exception as e:
-            logger.error(f"[NETWORK_ERROR] SIEM unreachable: {e}. Moving to local WAL.")
+            logger.error(f"[NETWORK_ERROR] SIEM unreachable at {SIEM_URL}: {e}. Moving to WAL.")
             with open(WAL_FILE, "a", encoding="utf-8") as f:
                 f.write(json.dumps(payload) + "\n")
 
@@ -66,7 +70,8 @@ async def retry_worker():
                     if not line.strip(): continue
                     data = json.loads(line)
                     try:
-                        await client.post("http://127.0.0.1:9000/ingest", json=data, timeout=3.0)
+                        # Используем динамический URL
+                        await client.post(f"{SIEM_URL}/ingest", json=data, timeout=3.0)
                         merkle_manager.prev_root = data["root_hash"]
                         logger.info(f"[RECOVERY] Synced WAL batch: {data['root_hash'][:12]}")
                     except Exception:
@@ -76,7 +81,6 @@ async def retry_worker():
             except Exception as e:
                 logger.error(f"[WAL_ERROR] Recovery worker failed: {e}")
 
-# --- Stages: Enrichment, Rust, Explain (без изменений) ---
 class EnrichmentStage:
     async def process(self, ctx):
         mock_db = {"standard": {"kyc_status": "verified", "account_age_days": 365.0},
