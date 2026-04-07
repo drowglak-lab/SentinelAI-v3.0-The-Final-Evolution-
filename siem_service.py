@@ -4,7 +4,6 @@ from pydantic import BaseModel
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding
 from cryptography.exceptions import InvalidSignature
-import os
 
 app = FastAPI(title="SentinelAI: External SIEM Witness")
 
@@ -15,23 +14,19 @@ class RootHashPayload(BaseModel):
     signature: str
 
 CHAIN_STORAGE = []
-PROCESSED_BATCHES = set() # Идемпотентность (защита от дублей)
+PROCESSED_BATCHES = set()
 
-# SIEM знает только публичный ключ
+# Загружаем публичный ключ шлюза
 with open("core/public.pem", "rb") as key_file:
     PUBLIC_KEY = serialization.load_pem_public_key(key_file.read())
 
-@app.get("/latest")
-async def get_latest_root():
-    return {"latest_root": CHAIN_STORAGE[-1]["root_hash"] if CHAIN_STORAGE else "0" * 64}
-
 @app.post("/ingest")
 async def ingest_root(data: RootHashPayload):
-    # 1. Защита от Replay-атак (Идемпотентность)
+    # Защита от дублей
     if data.root_hash in PROCESSED_BATCHES:
-        return {"status": "ignored", "reason": "already_processed"}
+        return {"status": "ignored", "reason": "replay_protection"}
 
-    # 2. Строгая проверка подписи (SIEM валидирует доказательства)
+    # Проверка подписи (SIEM валидирует SentinelAI)
     try:
         PUBLIC_KEY.verify(
             bytes.fromhex(data.signature),
@@ -40,16 +35,16 @@ async def ingest_root(data: RootHashPayload):
             hashes.SHA256()
         )
     except InvalidSignature:
-        print(f"‼️ ВЗЛОМ: Неверная подпись от шлюза для хэша {data.root_hash[:8]}")
-        raise HTTPException(status_code=403, detail="Invalid Root Signature")
+        print(f"[SECURITY ALERT] Invalid signature for hash: {data.root_hash[:8]}")
+        raise HTTPException(status_code=403, detail="Signature verification failed")
 
-    # 3. Валидация Hash Chain
+    # Проверка целостности цепи
     if CHAIN_STORAGE and data.prev_hash != CHAIN_STORAGE[-1]['root_hash']:
         raise HTTPException(status_code=409, detail="Hash chain broken")
 
     CHAIN_STORAGE.append(data.model_dump())
     PROCESSED_BATCHES.add(data.root_hash)
-    print(f"✅ SIEM принял Merkle Root: {data.root_hash[:12]} | Индекс: {len(CHAIN_STORAGE)}")
+    print(f"[+] Verified Root: {data.root_hash[:12]} | Index: {len(CHAIN_STORAGE)}")
     return {"status": "accepted"}
 
 if __name__ == "__main__":
