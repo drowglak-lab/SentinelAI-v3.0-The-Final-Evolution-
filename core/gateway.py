@@ -2,7 +2,7 @@ import random
 import asyncio
 import redis.asyncio as async_redis
 from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse  # Импортируем для ручного формирования ответов
+from fastapi.responses import JSONResponse
 from sentinel_core import SentinelCore
 
 app = FastAPI(title="SentinelAI v3.0")
@@ -40,12 +40,12 @@ async def startup_event():
 
 @app.middleware("http")
 async def security_gate(request: Request, call_next):
-    # 1. Мгновенный Kill-Switch (L0 + L1)
-    # Используем JSONResponse вместо raise HTTPException для корректной работы в мидлвари
+    # 1. Мгновенный Kill-Switch (L0 из Rust + L1 из нашего стейта)
+    # Если Rust-ядро внутри себя зафиксировало атаку, is_frozen() вернет True
     if core.is_frozen() or RecoveryState.MODE == "FROZEN":
         return JSONResponse(
             status_code=503,
-            content={"detail": "SYSTEM_FROZEN", "reason": "Integrity Breach Detected"}
+            content={"detail": "SYSTEM_FROZEN", "reason": "Integrity Breach or Manual Emergency"}
         )
 
     # 2. Режим Read-Only
@@ -62,7 +62,6 @@ async def security_gate(request: Request, call_next):
                 status_code=429,
                 content={
                     "detail": "RECOVERY_RAMP_UP", 
-                    "message": "Request throttled due to system recovery",
                     "allowed_rate": f"{RecoveryState.RATE_LIMIT * 100}%"
                 }
             )
@@ -71,4 +70,24 @@ async def security_gate(request: Request, call_next):
 
 @app.post("/v1/banking/transfer")
 async def handle_transfer(data: dict):
-    return {"status": "success", "audit_hash": "verified"}
+    # Извлекаем ID транзакции и хэш из входящего JSON
+    tx_id = data.get("tx_id", "default_id")
+    tx_hash = data.get("tx_hash", "default_hash")
+
+    # ВЫЗОВ RUST-ENFORCER
+    # Rust проверяет, нет ли подмены данных в RocksDB
+    is_valid = core.audit_and_verify(tx_id, tx_hash)
+
+    if not is_valid:
+        # Если Rust вернул False, значит он УЖЕ активировал локальный Kill-Switch
+        return JSONResponse(
+            status_code=400,
+            content={"status": "error", "detail": "INTEGRITY_MISMATCH", "action": "LOCAL_FREEZE_TRIGGERED"}
+        )
+
+    return {
+        "status": "success", 
+        "tx_id": tx_id,
+        "audit_hash": tx_hash,
+        "engine": "Rust-RocksDB-Enforcer"
+    }
