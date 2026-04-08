@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   siem:
     build:
@@ -11,6 +9,7 @@ services:
       - ./data:/app/data
     environment:
       - DB_PATH=/app/data/audit_siem.db
+      - PYTHONUNBUFFERED=1  # <--- КРИТИЧНО: отключает задержку логов
     restart: always
 
   gateway:
@@ -23,4 +22,5 @@ services:
       - siem
     environment:
       - SIEM_URL=http://siem:9000
+      - PYTHONUNBUFFERED=1  # <--- КРИТИЧНО: логи шлюза полетят сразу
     restart: always
