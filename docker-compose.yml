@@ -1,4 +1,18 @@
+version: '3.8'
+
 services:
+  gateway:
+    build: 
+      context: .
+      dockerfile: Dockerfile.gateway
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./data:/app/data
+    depends_on:
+      - redis
+      - siem
+
   siem:
     build:
       context: .
@@ -7,20 +21,12 @@ services:
       - "9000:9000"
     volumes:
       - ./data:/app/data
-    environment:
-      - DB_PATH=/app/data/audit_siem.db
-      - PYTHONUNBUFFERED=1  # <--- КРИТИЧНО: отключает задержку логов
-    restart: always
 
-  gateway:
-    build:
-      context: .
-      dockerfile: Dockerfile.gateway
+  redis:
+    image: "redis:alpine"
     ports:
-      - "8000:8000"
-    depends_on:
-      - siem
-    environment:
-      - SIEM_URL=http://siem:9000
-      - PYTHONUNBUFFERED=1  # <--- КРИТИЧНО: логи шлюза полетят сразу
-    restart: always
+      - "6379:6379"
+
+networks:
+  default:
+    name: sentinel_network
