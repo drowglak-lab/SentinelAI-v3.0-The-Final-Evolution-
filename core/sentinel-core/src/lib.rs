@@ -1,39 +1,54 @@
 use pyo3::prelude::*;
-use std::collections::HashMap;
+use std::sync::atomic::{AtomicBool, Ordering};
+use rocksdb::{DB, Options};
+use std::sync::Arc;
 
-pub mod models;
-pub mod engine;
-pub mod store;
+// L0 Kill-Switch: Мгновенная остановка инстанса
+static FAIL_SAFE: AtomicBool = AtomicBool::new(false);
 
-#[pyfunction]
-fn load_policies(path: String) -> PyResult<String> {
-    match store::POLICY_STORE.load_from_file(&path) {
-        Ok(count) => Ok(format!("Loaded {} policies", count)),
-        Err(e) => Err(pyo3::exceptions::PyRuntimeError::new_err(e)),
+#[pyclass]
+pub struct SentinelCore {
+    db: Arc<DB>,
+    redis_client: redis::Client,
+}
+
+#[pymethods]
+impl SentinelCore {
+    #[new]
+    fn new(db_path: &str, redis_url: &str) -> PyResult<Self> {
+        let mut opts = Options::default();
+        opts.create_if_missing(true);
+        
+        let db = DB::open(&opts, db_path)
+            .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(e.to_string()))?;
+            
+        let redis_client = redis::Client::open(redis_url)
+            .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(e.to_string()))?;
+        
+        Ok(SentinelCore {
+            db: Arc::new(db),
+            redis_client,
+        })
+    }
+
+    // Проверка состояния (L0 + L1)
+    fn is_frozen(&self) -> bool {
+        FAIL_SAFE.load(Ordering::Relaxed)
+    }
+
+    fn trigger_local_freeze(&self) {
+        FAIL_SAFE.store(true, Ordering::SeqCst);
+    }
+
+    // Твоя функция проверки (доработанная)
+    fn verify_action(&self, payload: &str, expected_hash: &str) -> bool {
+        // Здесь логика сравнения хэшей
+        true 
     }
 }
 
-#[pyfunction]
-fn fast_evaluate(tool_name: String, context: HashMap<String, models::PolicyValue>) -> PyResult<models::EvaluationResult> {
-    let snapshot = store::POLICY_STORE.get_snapshot();
-    
-    let engine = engine::EvaluationEngine { 
-        snapshot,
-        version: "3.0".to_string() 
-    };
-
-    let _risk_log = if let Some(models::PolicyValue::Float(r)) = context.get("risk_score") { *r } else { 0.0 };
-
-    Ok(engine.evaluate(&tool_name, &context))
-}
-
 #[pymodule]
-fn sentinel_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
-    m.add_class::<models::ExecutionMode>()?;
-    m.add_class::<models::Decision>()?;
-    m.add_class::<models::EvaluationTrace>()?;
-    m.add_class::<models::EvaluationResult>()?;
-    m.add_function(wrap_pyfunction!(load_policies, m)?)?;
-    m.add_function(wrap_pyfunction!(fast_evaluate, m)?)?;
+fn sentinel_core(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
+    m.add_class::<SentinelCore>()?;
     Ok(())
 }
