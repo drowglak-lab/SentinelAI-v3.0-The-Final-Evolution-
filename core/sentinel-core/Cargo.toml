@@ -8,26 +8,11 @@ name = "sentinel_core"
 crate-type = ["cdylib"]
 
 [dependencies]
-# Мост между Rust и Python 3.14 (ABI3 обеспечивает совместимость)
-pyo3 = { version = "0.21", features = ["extension-module", "abi3-py312"] }
-
-# Потокобезопасные таблицы для хранения политик (O(1) доступ)
-dashmap = "5.5"
-
-# Атомарная замена снимков памяти (Snapshot Pattern)
-arc-swap = "1.6"
-
-# Статические глобальные переменные (для хранилища и логгера)
-lazy_static = "1.4"
-
-# Фреймворк сериализации (основа для YAML и JSON)
+pyo3 = { version = "0.21.2", features = ["abi3-py312"] }
 serde = { version = "1.0", features = ["derive"] }
-
-# Поддержка JSON для аудита
 serde_json = "1.0"
-
-# Поддержка YAML для внешних конфигов политик (наш новый DSL)
-serde_yaml = "0.9"
-
-# Работа с временем и интеграция с Serde для ISO-8601
-chrono = { version = "0.4", features = ["serde"] }
+rocksdb = "0.21.0"
+redis = { version = "0.23.0", features = ["tokio-comp"] }
+tokio = { version = "1", features = ["full"] }
+sha2 = "0.10"
+anyhow = "1.0"
