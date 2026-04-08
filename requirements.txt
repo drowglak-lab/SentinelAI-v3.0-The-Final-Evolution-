@@ -3,4 +3,5 @@ uvicorn
 redis
 cryptography
 pydantic
+pydantic-settings
 httpx
