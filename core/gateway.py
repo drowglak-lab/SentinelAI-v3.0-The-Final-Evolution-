@@ -11,8 +11,12 @@ from pydantic_settings import BaseSettings
 from sentinel_core import SentinelCore
 from execution.policy_engine import PolicyEngine
 
-# 💥 ИМПОРТИРУЕМ НАШ НОВЫЙ FINTECH MIDDLEWARE
 from core.idempotency import FinTechIdempotencyMiddleware
+
+# 💥 ИМПОРТЫ ДЛЯ OUTBOX ПАТТЕРНА
+from core.database import init_db, get_db_connection
+from core.transaction import TransactionManager
+from core.relay import outbox_relay_worker
 
 # ==========================================
 # 1. КОНФИГУРАЦИЯ И СТРОГИЕ ТИПЫ
@@ -67,25 +71,29 @@ async def sync_with_redis(redis_client: async_redis.Redis, state: RecoveryState)
 # ==========================================
 # 3. GLOBAL CONNECTIONS & LIFECYCLE
 # ==========================================
-# Создаем глобальный пул соединений Redis ДО старта приложения
 shared_redis_client = async_redis.from_url(settings.redis_url, decode_responses=True)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     app.state.core = SentinelCore(settings.rocksdb_path, settings.redis_url)
-    app.state.redis = shared_redis_client # Используем уже созданный пул
+    app.state.redis = shared_redis_client
     app.state.recovery = RecoveryState()
-    
     app.state.policy_engine = PolicyEngine("config/policies.yaml")
     
+    # 💥 ИНИЦИАЛИЗАЦИЯ ФИНТЕХ-ЯДРА
+    await init_db()
+    app.state.relay_task = asyncio.create_task(outbox_relay_worker())
+
     app.state.sync_task = asyncio.create_task(
         sync_with_redis(app.state.redis, app.state.recovery)
     )
     yield
     
     app.state.sync_task.cancel()
+    app.state.relay_task.cancel() # Гасим релей при выключении
     try:
         await app.state.sync_task
+        await app.state.relay_task
     except asyncio.CancelledError:
         pass
     await app.state.redis.close()
@@ -93,22 +101,16 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="SentinelAI v3.0 - Enterprise Edition", lifespan=lifespan)
 
 # ==========================================
-# 4. MIDDLEWARE CHAIN (Порядок имеет значение!)
+# 4. MIDDLEWARE CHAIN
 # ==========================================
-
-# Сначала проверяем идемпотентность (защита от двойных трат)
-# strict_mode=False позволяет пропускать запросы без ключа во время тестов, 
-# в реальном проде ставится True
 app.add_middleware(
     FinTechIdempotencyMiddleware, 
     redis_client=shared_redis_client, 
     strict_mode=False 
 )
 
-# Затем наша самописная L1 защита (Ramp-Up, Frozen)
 @app.middleware("http")
 async def security_gate(request: Request, call_next):
-    # Пропускаем запросы без состояния (на случай если идемпотентность отбила их раньше)
     if not hasattr(request.app.state, "recovery"):
          return await call_next(request)
 
@@ -139,29 +141,47 @@ def get_policy_engine(request: Request) -> PolicyEngine:
 @app.post("/v1/banking/transfer")
 async def handle_transfer(
     req: TransferRequest, 
+    request: Request, # 💥 Добавили request для заголовков
     core: SentinelCore = Depends(get_sentinel_core),
     policy_engine: PolicyEngine = Depends(get_policy_engine)
 ):
+    # 1. Извлекаем Correlation ID для трейсинга
+    trace_id = request.headers.get("X-Correlation-ID", "unknown")
+
+    # 2. Проверка политик
     is_allowed, reason = policy_engine.evaluate(
         action="transfer_funds",
         role=req.role,
         context={"amount": req.amount, "target": req.target}
     )
-    
     if not is_allowed:
         return JSONResponse(status_code=403, content={"status": "error", "detail": "POLICY_DENIED", "reason": reason})
 
+    # 3. Аппаратная проверка Rust
     is_valid = core.audit_and_verify(req.tx_id, req.tx_hash)
-
     if not is_valid:
         return JSONResponse(status_code=400, content={"status": "error", "detail": "INTEGRITY_MISMATCH"})
 
-    # Добавляем небольшую задержку, чтобы в тестах было легче поймать гонку данных
-    await asyncio.sleep(0.5)
+    # 4. 💥 ФИНАНСОВАЯ ТРАНЗАКЦИЯ (Outbox Pattern)
+    idem_key = request.headers.get("Idempotency-Key", req.tx_id)
+    
+    db_conn = await get_db_connection()
+    tx_manager = TransactionManager(db_conn)
+    
+    try:
+        # Вся грязная работа с БД, локами и консистентностью скрыта внутри менеджера
+        payment_result = await tx_manager.authorize_transfer(
+            idempotency_key=idem_key,
+            user_id=req.role,
+            amount=req.amount,
+            target=req.target
+        )
+    finally:
+        await db_conn.close() # Обязательно возвращаем коннект в пул
 
     return {
         "status": "success", 
-        "tx_id": req.tx_id,
-        "audit_hash": req.tx_hash,
-        "engine": "Dynamic-Policy + Rust-RocksDB-Enforcer"
+        "trace_id": trace_id,
+        "payment": payment_result,
+        "engine": "TransactionManager + Outbox Pattern"
     }
