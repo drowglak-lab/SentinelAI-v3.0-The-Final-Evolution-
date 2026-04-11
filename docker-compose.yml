@@ -12,6 +12,7 @@ services:
     depends_on:
       - redis
       - siem
+      - opa
 
   siem:
     build:
@@ -27,7 +28,7 @@ services:
     ports:
       - "6379:6379"
 
-opa:
+  opa:
     image: openpolicyagent/opa:latest-debug
     ports:
       - "8181:8181"
