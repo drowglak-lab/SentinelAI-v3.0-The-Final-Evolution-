@@ -27,6 +27,19 @@ services:
     ports:
       - "6379:6379"
 
+opa:
+    image: openpolicyagent/opa:latest-debug
+    ports:
+      - "8181:8181"
+    command:
+      - "run"
+      - "--server"
+      - "--addr=0.0.0.0:8181"
+      - "--log-level=debug"
+      - "/policies"
+    volumes:
+      - ./config/opa:/policies  # Монтируем папку с нашим policy.rego
+      
 networks:
   default:
     name: sentinel_network
