@@ -1,10 +1,13 @@
 package sentinel.fintech
 
-# Запрещаем всё по умолчанию (Deny by default - золотое правило финтеха)
-default allow = false
+# Включаем современный синтаксис (Rego v1)
+import rego.v1
+
+# Запрещаем всё по умолчанию
+default allow := false
 
 # Разрешаем перевод только если выполняются ВСЕ условия
-allow {
+allow if {
     input.action == "transfer_funds"
     
     # Проверка лимитов
@@ -20,7 +23,7 @@ allow {
 }
 
 # Вспомогательное правило: список санкционных стран
-is_sanctioned(country) {
+is_sanctioned(country) if {
     sanctioned_countries := {"NK", "IR", "SY"}
-    country == sanctioned_countries[_]
+    country in sanctioned_countries
 }
