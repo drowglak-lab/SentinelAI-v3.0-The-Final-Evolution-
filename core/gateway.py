@@ -18,6 +18,7 @@ from core.database import init_db, get_db_connection
 from core.transaction import TransactionManager
 from core.relay import outbox_relay_worker
 from security.enforcer import DeterministicEnforcer
+from security.opa_client import ResilientOPAClient # <-- ДОБАВЛЕН ИМПОРТ OPA
 
 
 # ==========================================
@@ -85,7 +86,10 @@ async def lifespan(app: FastAPI):
     # Оставляем PolicyEngine в памяти для других модулей, но убираем из критического пути платежей
     app.state.policy_engine = PolicyEngine("config/policies.yaml") 
 
-    # 💥 ИНИЦИАЛИЗАЦИЯ ФИНТЕХ-ЯДРА
+    # 💥 ИНИЦИАЛИЗИРУЕМ OPA-КЛИЕНТ (Указываем имя сервиса из docker-compose)
+    app.state.opa_client = ResilientOPAClient("http://opa:8181")
+
+    # ИНИЦИАЛИЗАЦИЯ ФИНТЕХ-ЯДРА
     await init_db()
     app.state.relay_task = asyncio.create_task(outbox_relay_worker())
 
@@ -153,12 +157,13 @@ async def handle_transfer(
     idem_key = request.headers.get("Idempotency-Key", req.tx_id)
 
     db_conn = await get_db_connection()
-    enforcer = DeterministicEnforcer(db_conn)
+    
+    # 💥 ПЕРЕДАЕМ OPA-КЛИЕНТ В ЭНФОРСЕР
+    enforcer = DeterministicEnforcer(db_conn, request.app.state.opa_client)
     tx_manager = TransactionManager(db_conn)
 
     try:
         # 2. 🛡️ ZERO-TRUST AI: Проверяем намерения, а не сырой payload
-        # Теперь req.target должен быть UUID из белого списка, а не IBAN!
         is_safe, reason, safe_context = await enforcer.validate_transfer_intent(
             user_id=req.role,
             ai_payload={"amount": req.amount, "target_beneficiary_id": req.target}
@@ -189,5 +194,5 @@ async def handle_transfer(
         "status": "success",
         "trace_id": trace_id,
         "payment": payment_result,
-        "engine": "DeterministicEnforcer + TransactionManager"
+        "engine": "OPA + DeterministicEnforcer + TransactionManager"
     }
